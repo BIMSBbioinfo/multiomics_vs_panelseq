@@ -46,7 +46,7 @@ for(source in l.d) {
         as.data.frame() %>% na.omit()
       
       # get indices for 70% of the data set
-      intrain <- createDataPartition(y = tmp[,2], p= 0.7)[[1]]
+      intrain <- createDataPartition(y = tmp[,2], p= 0.8)[[1]]
       
       # seperate test and training sets
       training[[source]][[type]] <- tmp[intrain,]
@@ -61,7 +61,7 @@ tune_list <- list(
                              tuneGrid = expand.grid(cost = c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25)),
                              importance = TRUE),
   gbm = caretModelSpec(method = "gbm",
-                       tuneGrid = expand.grid(n.trees = n.trees=c(100,200,300,400,500),
+                       tuneGrid = expand.grid(n.trees=c(100,200,300,400,500),
                                               interaction.depth=c(1,2),
                                               shrinkage=c(0.01,0.1),
                                               n.minobsinnode = 10)),
@@ -81,14 +81,14 @@ for (source in l.d) {
   for(type in d.type){
     caretList(x = training[[source]][[type]][,-c(1,2)], 
               y = training[[source]][[type]]$TimeToDouble,
-              trControl=trainControl(method="cv", number = 10,
+              trControl=trainControl(method="cv", number = 5,
                                      allowParallel = TRUE,
                                      savePredictions = "final",
                                      index = createResample(training[[source]][[type]]$sample_id),
                                      returnResamp = "final",
-                                     search = "random",
+                                     search = "grid",
                                      verbose = TRUE),
-              methodList = c("svmLinear","rf","glmnet"),
+              methodList = c("svmLinear2","rf","glmnet","gbm"),
               continue_on_fail = FALSE,
               tuneList=tune_list,
               verbose = TRUE) -> model.out
@@ -97,7 +97,7 @@ for (source in l.d) {
 }
 
 saveRDS(models, file.path("data/growth_rate_results/",  
-                          paste0("growth_rate_Results_10kcv_", run.code, ".RDS")))
+                          paste0("growth_rate_Results_5kcv_", run.code, ".RDS")))
 parallel::stopCluster(Mycluster)
 
 # -------------------------------------------------------------------------------------------------
@@ -173,7 +173,7 @@ tgrowth_sum <- testing_growth  %>%
   ) %>%
   mutate( se=sd/sqrt(n))
 
-#plot the results
+#plot the summary results
 growth_plot <- tgrowth_sum %>%
   ggplot(aes(x= dataset,y=mean, fill=validation)) + 
   geom_bar(position = 'dodge', aes(x=dataset, y=mean), stat="identity") +
@@ -185,7 +185,26 @@ growth_plot <- tgrowth_sum %>%
   ggtitle("Growth Rate Predictions")+
   ylab("Mean of R-squared") + xlab("dataset")
 
-#save the plot
+#save the summary plot
 pdf("misc/summarized_growth_Rate_prediction_plot.pdf", width = 20, height = 10)
 growth_plot
 dev.off()
+
+#plot the models seperately
+testing_growth %>%
+  filter(Rsquared < 1) %>% 
+  group_by(dataset, model) %>% 
+  summarize(mean_rsqrd = mean(Rsquared),
+            sd_rsqrd = sd(Rsquared)) 
+
+
+  ggplot(data = , aes(x = dataset, y = mean_rsqrd)) + 
+  geom_col(aes(fill = validation), position = "dodge", color = "grey30", width = 0.7) +
+  facet_wrap(~ `model`) +
+  geom_errorbar(aes(x=dataset, ymin=mean_rsqrd - sd_rsqrd, ymax=mean_rsqrd + sd_rsqrd,), width=0.5,
+                colour="black", size=1, position = position_dodge(0.9))+
+  geom_hline(yintercept = 0) +
+  lims(y = c(-0.1, 0.5)) +
+  labs(x = "Dataset", y = "Mean of Rsquared") +
+   
+  theme_bw(base_size = 14) + theme(aspect.ratio = 1.7, axis.text.x = element_text(angle = 45, hjust = 1)) 

@@ -3,7 +3,7 @@ rm(list=ls()); gc()
 
 #Load the libraries
 library(caret)
-library(tidyr)
+library(tidyverse)
 library(dplyr)
 library(doParallel)
 library(caretEnsemble)
@@ -60,6 +60,11 @@ tune_list <- list(
   svmLinear = caretModelSpec(method = "svmLinear2",
                              tuneGrid = expand.grid(cost = c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25)),
                              importance = TRUE),
+  gbm = caretModelSpec(method = "gbm",
+                       tuneGrid = expand.grid(n.trees = n.trees=c(100,200,300,400,500),
+                                              interaction.depth=c(1,2),
+                                              shrinkage=c(0.01,0.1),
+                                              n.minobsinnode = 10)),
   ranger = caretModelSpec(method = "ranger",
                           tuneGrid = expand.grid(mtry = seq(2, 10, by = 1),
                                                  min.node.size = c(3, 5, 10),
@@ -91,14 +96,15 @@ for (source in l.d) {
   }
 }
 
-saveRDS(models, file.path("data/growth_rate_Results/growth_rate_Results",  
-                          paste0(source, "_10kcv_", run.code, ".RDS")))
+saveRDS(models, file.path("data/growth_rate_results/",  
+                          paste0("growth_rate_Results_10kcv_", run.code, ".RDS")))
 parallel::stopCluster(Mycluster)
 
 # -------------------------------------------------------------------------------------------------
-summary_models <- function(model_list,validation_type = NA, test_list = NA){
+model_types <- c("svmLinear","ranger","glmnet","gbm")
+summary_models <- function(model_list,validation_type = NA, test_list = NA,
+                           model_types = NA){
   t.res <- dplyr::tibble()
-  model_types <- c("svmLinear","ranger","glmnet")
   for (source in names(model_list)) {
     for (dt in names(model_list[[source]])) {
       #remove duplicates if there is any
@@ -147,21 +153,39 @@ summary_models <- function(model_list,validation_type = NA, test_list = NA){
   return(t.res)
 }
 
+# -------------------------------------------------------------------------------------------------
 #summary results
-testing_growth <- summary_models(models, "cv", test_list = testing)
+testing_growth <- summary_models(models, "cv", test_list = testing,
+                                 model_types = model_types)
 
 #save all predictions
-saveRDS(testing_growth, file.path("data/growth_rate_Results/growth_rate_predictions_all.RDS"))
+saveRDS(testing_growth,
+        file.path("data/growth_rate_Results/growth_rate_predictions_all.RDS"))
+
+
+# Calculates mean, sd,and se
+tgrowth_sum <- testing_growth  %>%
+  group_by(dataset,validation) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Rsquared),
+    sd=sd(Rsquared)
+  ) %>%
+  mutate( se=sd/sqrt(n))
 
 #plot the results
-testing_growth %>% 
-  ggplot(data = , aes(x = dataset, y = Rsquared)) + 
-  geom_bar(position = 'dodge',stat="identity", aes(fill = validation))+
-  scale_fill_manual(values = alpha(c("orangered", "red", "steelblue"), 0.67)) +
-  geom_hline(yintercept = 0) +
-  labs(x = "Dataset", y = "Rsquared") +
-  lims(y = c(-0.1, 0.5)) +
-  facet_grid(. ~ source) + 
-  theme_bw(base_size = 14) + 
-  facet_wrap(~model ) +
-  theme(aspect.ratio = 1.7, axis.text.x = element_text(angle = 45, hjust = 1)) 
+growth_plot <- tgrowth_sum %>%
+  ggplot(aes(x= dataset,y=mean, fill=validation)) + 
+  geom_bar(position = 'dodge', aes(x=dataset, y=mean), stat="identity") +
+  geom_errorbar(aes(x=dataset, ymin=mean-se, ymax=mean+se), width=0.5,
+                colour="black", size=1, position = position_dodge(0.9))+
+  theme_bw()+
+  theme(legend.position = "top",plot.title = element_text(hjust = 0.5)) +
+  scale_fill_brewer(palette="Set1")+
+  ggtitle("Growth Rate Predictions")+
+  ylab("Mean of R-squared") + xlab("dataset")
+
+#save the plot
+pdf("misc/summarized_growth_Rate_prediction_plot.pdf", width = 20, height = 10)
+growth_plot
+dev.off()

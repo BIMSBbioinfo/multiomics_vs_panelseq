@@ -16,6 +16,8 @@
 /data/PDX_all
 /data/CCLE
 /data/Results
+/data/growth_rate_results
+
 # R Environment Variables
 multiomics-vs-panelseq-manuscript.Rproj
 *draft.R

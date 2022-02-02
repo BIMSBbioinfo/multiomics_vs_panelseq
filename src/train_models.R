@@ -49,7 +49,7 @@ message(paste0("Working directory: ", args[1]))
 message(paste0("Intersected features: ", args[2]))
 message(paste0("Filtered data: ", args[3]))
 message(paste0("Mutatations summarized per gene: ", args[4]))
-message(paste0(ifelse(args[5], "Solving classification problem", "Solving regression problem")))
+#message(paste0(ifelse(args[5], "Solving a classification problem", "Solving a regression problem")))
 message(paste0("Number of forked processes: ", args[6]))
 message(paste0("Gene set to subset features: ", args[7]))
 message(paste0("Run code: ", run.code))
@@ -75,6 +75,8 @@ drugs <- purrr::map(l.d,
                     ~ data.table::fread(file.path(p.d, "prepared", .x, "drug_response/dr_targeted.tsv")) %>% split(., .$column_name)
 )
 names(drugs) <- l.d
+
+# classification or regression problem?
 if (toggles$drClassification) {
   message("\nSolving a classification problem")
   for (source in names(drugs)) {
@@ -92,7 +94,7 @@ if (toggles$drClassification) {
 }
 
 
-# classification or regression problem?
+
 
 # -------------------------------------------------------------------------------------------------
 # read the data
@@ -107,6 +109,7 @@ if (file.exists(file.path(p.wd, "Results", paste0("PCAembeddings_", run.code, ".
   data.loadings <- list()
   for (source in l.d) {
     for (type in d.type) {
+      message(paste0("\nReading in ", source, "|", type, "..."))
       data[[source]][[type]] <- data.table::fread(file.path(p.d, 
                                                             "generated",
                                                             paste0(source, "_", type, 
@@ -132,18 +135,31 @@ if (file.exists(file.path(p.wd, "Results", paste0("PCAembeddings_", run.code, ".
         }
       }
       
-      ### TODO
-      prcomp.obj <- prcomp(data[[source]][[type]][, -1])
+      
+      ### Remove features with Zero variance
+      message("Filtering zero variance features...")
+      nzv <- nearZeroVar(data[[source]][[type]][, -1], saveMetrics = T)
+      ftd <- rownames(nzv[nzv$zeroVar == 1, ])
+      if (length(ftd) >= 1) {
+        data[[source]][[type]] <- data[[source]][[type]][, -which(colnames(data[[source]][[type]]) %in% ftd)]
+      }
+      message(paste0(length(ftd), " features with zero variance detected and removed"))
+      
+      ## Prepare PCA object
+      message("Performing PCA...")
+      prcomp.obj <- prcomp(data[[source]][[type]][, -1], center = T, scale. = T)
       data.pca[[source]][[type]] <- as.data.frame(prcomp.obj$x)
       data.pca[[source]][[type]]$sample_id <- data[[source]][[type]]$sample_id
       
       ## data size check
-      if (dim(data.pca[[source]][[type]])[2] - 1 < 300) {
+      if (dim(data.pca[[source]][[type]])[2] - 1 < 100) {
         n.pcs <- dim(data.pca[[source]][[type]])[2] - 1
       } else {
-        n.pcs <- 300
+        n.pcs <- 100
       }
       data.pca[[source]][[type]] <- data.pca[[source]][[type]][, c("sample_id", paste0("PC", 1:n.pcs))]
+      message(paste0(n.pcs, " PCs are kept for model fitting\n"))
+      
       # include loadings
       data.loadings[[source]][[type]] <- as.data.frame(prcomp.obj$rotation)
     }
@@ -155,7 +171,7 @@ if (file.exists(file.path(p.wd, "Results", paste0("PCAembeddings_", run.code, ".
 
 # -------------------------------------------------------------------------------------------------
 # prepare training&testing sets
-message("Looking for partitions...")
+message("\nLooking for partitions...")
 if (file.exists(file.path(p.wd, "Results", paste0("trainSets_", run.code, ".RDS")))) {
   message("Data partitions detected. Reading in...")
   l.tr <- readRDS(file.path(p.wd, "Results", paste0("trainSets_", run.code, ".RDS")))
@@ -242,24 +258,25 @@ if (toggles$drClassification) {
     #blasso = caretModelSpec(method = "blasso",
     #                        tuneGrid = expand.grid(sparsity = seq(0.1, 0.9, by = 0.15))),
     svmLinear = caretModelSpec(method = "svmLinear2",
-                               tuneGrid = expand.grid(cost = c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25)),
+                               tuneGrid = expand.grid(cost = c(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5)),
                                importance = TRUE),
     ranger = caretModelSpec(method = "ranger",
                             tuneGrid = expand.grid(mtry = seq(2, 10, by = 1),
-                                                   min.node.size = c(3, 5, 10),
+                                                   min.node.size = c(2, 3, 5, 10),
                                                    splitrule = c("variance")),
                             importance = "impurity", 
                             num.threads = 1),
+    rf   = caretModelSpec(method = "rf", tuneLength = 20),
     glmnet = caretModelSpec(method = "glmnet",
-                            tuneGrid = expand.grid(alpha = seq(0, 1, length = 30),
+                            tuneGrid = expand.grid(alpha = seq(0, 1, length = 50),
                                                    lambda = seq(0.0001, 1, length = 100)))
   )
 }
 
-message("Fitting models...")
+message("\nFitting models...")
 l.res <- list()
 for(source in l.d) {
-  message(paste0("Starting ", source, "..."))
+  message(paste0("\nStarting ", source, "..."))
   for (dataset in d.type) {
     message(paste0("Processing ", dataset))
     ## Drop drugs with too little data points

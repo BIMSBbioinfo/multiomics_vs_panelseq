@@ -7,4 +7,4 @@ The potential of multi-omics and the limitations of panel sequencing for clinica
 ```
 
 ## Drug Response Prediction Analysis Workflow
-![PANEL VS MULTIOMICS](https://github.com/igunduz/multiomics-vs-panelseq-manuscript/blob/main/PANEL%20VS%20MULTIOMICS.png)
+![PANEL VS MULTIOMICS](https://github.com/BIMSBbioinfo/multiomics-vs-panelseq/blob/main/PANEL%20VS%20MULTIOMICS.png)

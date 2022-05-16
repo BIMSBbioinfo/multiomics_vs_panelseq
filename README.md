@@ -13,12 +13,12 @@ Supporting repository for the manuscript of the same name. Here, one can find sc
 After the selected data were downloaded, one has multiple paths to follow. 
 To generate models from the processed data the code section below would be sufficient:
  ```R
- Rscript src/model_DR.R "CCLE" ./data <path_to_write_models>
- Rscript src/model_DR.R "PDX" ./data <path_to_write_models>
+ Rscript src/model_DR.R "CCLE" <path_to_data_dir> <path_to_write_models>
+ Rscript src/model_DR.R "PDX" <path_to_data_dir> <path_to_write_models>
  ```
 Alternatively, one can directly recreate the figures running this section:
  ```R
- Rscript src/plot_figures.R ./data <path_to_write_figures>
+ Rscript src/plot_figures.R <path_to_data_dir> <path_to_write_figures>
  ```
 
 

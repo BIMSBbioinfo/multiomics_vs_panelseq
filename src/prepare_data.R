@@ -1,53 +1,19 @@
-#!/opt/R/4.0/bin/Rscript
 args = commandArgs(trailingOnly = TRUE)
 
-
 # {SETUP}
+## Paths
+p.script.dir <- dirname(sys.frame(1)$ofile)
+p.parent.dir <- dirname(p.script.dir)
+dset <- as.character(args[1])
+p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data", "Raw", dset)) ## Path to a folder that contains Raw data
+p.aux <- file.path(p.parent.dir, "data", "auxiliary")
+p.out <- ifelse(length(args) >= 3, as.character(args[3]), file.path(p.parent.dir, "data")) ## Path to a folder where the "prepared" will be written
+
 ## libraries & functions
 library(tictoc)
 library(data.table)
-utility_script <- '/data/local/buyar/arcas/uyar_et_al_multiomics_deeplearning/src/common_functions.R' # utility script
-source(utility_script)
-## time functions
-my.msg.tic <- function(tic, msg)
-{
-  if (is.null(msg) || is.na(msg) || length(msg) == 0)
-  {
-    outmsg <- paste0("Finished\nElapsed time: ", lubridate::seconds_to_period(round(toc - tic, 0)))
-  }
-  else
-  {
-    outmsg <- paste0("Starting ", msg, "...")
-  }
-}
-my.msg.toc <- function(tic, toc, msg, info)
-{
-  if (is.null(msg) || is.na(msg) || length(msg) == 0)
-  {
-    outmsg <- paste0("Finished\nElapsed time: ", lubridate::seconds_to_period(round(toc - tic, 0)))
-  }
-  else
-  {
-    outmsg <- paste0(msg, 
-                     " finished\nElapsed time: ", 
-                     lubridate::seconds_to_period(round(toc - tic, 0)),
-                     "\n")
-  }
-}
-
-## function to get gene set scores from gex data 
-score_gene_set <- function(rankData, genes_up, gene_down = NULL) {
-  scores <- singscore::simpleScore(rankData, upSet = genes_up)
-  return(scores$TotalScore)
-}
-
-
-
-## Paths
-dset <- as.character(args[1])
-p.data <- paste0("/local/abarano/Projects/DrugResponse/data/Raw/", dset)
-p.aux <- "/local/abarano/Projects/DrugResponse/data/auxiliary"
-p.out <- "/local/abarano/Projects/DrugResponse/data/"
+utility_functions <- file.path(p.script.dir, "F_auxiliary.R")
+source(utility_functions)
 
 # {MAIN}
 # time stamp

@@ -1,44 +1,21 @@
-#!/opt/R/4.0/bin/Rscript
 args = commandArgs(trailingOnly = TRUE)
 
-
 # {SETUP}
+## Paths
+p.script.dir <- dirname(sys.frame(1)$ofile)
+p.parent.dir <- dirname(p.script.dir)
+dset <-as.character(args[1])    ## Either CCLE or PDX
+p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data")) ## Path to a folder that contains "prepared" data
+p.out <- ifelse(length(args) >= 3, as.character(args[3]), p.parent.dir) ## Path to a folder where the models and their summary statistics will be written
+
 ## libraries & functions
 library(foreach)
 library(tictoc)
 library(data.table)
-utility_script <- "/data/local/buyar/arcas/uyar_et_al_multiomics_deeplearning/src/common_functions.R" # utility script
-source(utility_script)
-# time functions
-my.msg.tic <- function(tic, msg) {
-  if (is.null(msg) || is.na(msg) || length(msg) == 0)
-  {
-    outmsg <- paste0("Finished\nElapsed time: ", lubridate::seconds_to_period(round(toc - tic, 0)))
-  }
-  else
-  {
-    outmsg <- paste0("Starting ", msg, "...")
-  }
-}
-my.msg.toc <- function(tic, toc, msg, info) {
-  if (is.null(msg) || is.na(msg) || length(msg) == 0)
-  {
-    outmsg <- paste0("Finished\nElapsed time: ", lubridate::seconds_to_period(round(toc - tic, 0)))
-  }
-  else
-  {
-    outmsg <- paste0(msg, 
-                     " finished\nElapsed time: ", 
-                     lubridate::seconds_to_period(round(toc - tic, 0)),
-                     "\n")
-  }
-}
+utility_functions <- file.path(p.script.dir, "F_auxiliary.R")
+source(utility_functions)
 
-
-## Paths
-dset <-as.character(args[1])
-p.data <- "/local/abarano/Projects/DrugResponse/data"
-p.out <- "/local/abarano/Projects/DrugResponse/Results"
+## read in data
 dat <- readRDS(file.path(p.data, paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data 
 
@@ -130,7 +107,6 @@ run_caret <- function(dat, dr, drugName) {
   
   
   
-  
   # compute results for mut+cnv+gex features (mo=multiomics) -------------------
   message(date(), " => processing multiomics")
   mo.train <- data.frame(do.call(cbind, lapply(dat.raw[c('mut.panel', 'cnv.panel', 'gex')], 
@@ -146,7 +122,6 @@ run_caret <- function(dat, dr, drugName) {
   mo.fit.glm <- train_caret.glm(mo.train, c("center", "scale", "nzv"))
   mo.fit.glm.pca <- train_caret.glm(mo.train, c("center", "scale", "nzv", "pca"))
 
-  
   # results
   panel.stats.glm <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm, panel.test))
   panel.stats.glm.pca <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm.pca, panel.test))
@@ -170,8 +145,9 @@ dr <- dr[!is.na(dr$value)][!is.na(sample_id)][!is.na(column_name)]
 dr$column_name <- gsub("/", "-", dr$column_name)
 candidates <- names(which(table(dr[column_name != 'untreated']$column_name) > as.numeric(args[2])))
 
+# assign a unique identifier to the modelling run
 run.code <- paste0(sample(1:1e2, 1), sample(letters, 1))
-outdir <- paste0(run.code, "_caretRes")
+outdir <- paste0(run.code, "_", dset, "_caretRes")
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }
@@ -184,25 +160,9 @@ results <- foreach(drug = candidates) %dopar% {
   return(r)
 }
 parallel::stopCluster(cl)
-# cl <- parallel::makeCluster(12)
-# parallel::clusterExport(cl = cl, varlist = c('utility_script', 'dat', 'dr',
-#                                              'run_caret',
-#                                              'train_caret.rf', 'train_caret.glm',
-#                                              'p.out', 'outdir'))
-# results <- pbapply::pblapply(cl = cl, 
-#                              candidates, 
-#                              function(d) {
-#                                  source(utility_script)
-#                                  require(data.table)
-#                                  r <- run_caret(dat, dr, drugName = d)
-#                                  saveRDS(r, file = file.path(p.out, outdir, paste0(d, ".caret.RDS")))
-#                                  return(r)
-#                                  }
-#                             )
-# parallel::stopCluster(cl)
 toc(quiet = FALSE, func.toc = my.msg.toc)
 
-
+## assemble model stats
 names(results) <- candidates
 dt <- do.call(rbind, 
               lapply(names(results), 
@@ -221,6 +181,27 @@ dt <- do.call(rbind,
                     )
               )
 saveRDS(dt, file = file.path(p.out, outdir, "caret.stats.RDS"))
+
+## Estimate feature importance
+require(furrr)
+plan(multisession, workers = 4)
+list.files(file.path(p.out, outdir), 
+           pattern = ".caret.RDS", 
+           full.names = T) %>% 
+future_map(.,
+           ~ varImp(readRDS(.x)$mo$mo.fit)$importance
+           ) -> l.varimp
+names(l.varimp) <- list.files(file.path(p.out, outdir), 
+                              pattern = ".caret.RDS", 
+                              full.names = F) %>% basename() %>% str_remove(., ".caret.RDS")
+purrr::map2(l.varimp,
+            names(l.varimp),
+            ~ .x %>% as_tibble(rownames = "Feature") %>% mutate(drug = .y)) %>% 
+  purrr::reduce(., rbind) -> t.varimp
+write_tsv(t.varimp, file.path(p.out, outdir, "varImp.tsv"))
 message(date(), "\nFinished!")
+
+
+
 
 

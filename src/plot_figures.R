@@ -1,70 +1,19 @@
-#!/opt/R/4.0/bin/Rscript
 args = commandArgs(trailingOnly = TRUE)
-
 require(tidyverse)
 require(janitor)
 require(patchwork)
 
-## auxiiary
-plot_pcaImp <- function(data_melted, base.size = 12) {
-  (
-    (ggplot(data = data_melted, aes(y = `scale+nzv+pca`, x = "")) + 
-       geom_boxplot() + 
-       lims(y = c(0, 0.5)) +
-       theme_bw(base_size = base.size) + labs(x = "")
-    ) +
-      (ggplot(data = data_melted, aes(x = `scale+nzv`, y = `scale+nzv+pca`)) + 
-         geom_point(aes(color = `scale+nzv+pca` - `scale+nzv`)) + 
-         geom_abline(intercept = 0, slope = 1) + 
-         lims(x = c(0, 0.5), y = c(0, 0.5)) +
-         scale_color_gradientn(colours = terrain.colors(100)) +
-         theme_bw(base_size = base.size) + labs(x = "", y = "", color = "PCA\nimprovement")
-      ) +
-      (plot_spacer()
-      ) + 
-      (ggplot(data = data_melted, aes(x = `scale+nzv`, y = "")) + 
-         geom_boxplot() + 
-         lims(x = c(0, 0.5)) +
-         theme_bw(base_size = base.size) + labs(y = "")
-      )
-  ) + plot_layout(widths = c(0.2, 1),
-                  heights = c(1, 0.2))
-}
-plot_moImp <- function(data_melted, base.size = 12) {
-  (
-    (ggplot(data = data_melted, aes(y = mo, x = "")) + 
-       geom_boxplot() + 
-       lims(y = c(0, 0.5)) +
-       theme_bw(base_size = base.size) + labs(x = "")
-    ) +
-      (ggplot(data = data_melted, aes(x = panel, y = mo)) + 
-         geom_point(aes(color = mo - panel)) + 
-         geom_abline(intercept = 0, slope = 1) + 
-         lims(x = c(0, 0.5), y = c(0, 0.5)) +
-         scale_color_gradientn(colours = terrain.colors(100)) +
-         theme_bw(base_size = base.size) + labs(x = "", y = "", color = "Multiomics\nimprovement")
-      ) +
-      (plot_spacer()
-      ) + 
-      (ggplot(data = data_melted, aes(x = panel, y = "")) + 
-         geom_boxplot() + 
-         lims(x = c(0, 0.5)) +
-         theme_bw(base_size = base.size) + labs(y = "")
-      )
-  ) + plot_layout(widths = c(0.2, 1),
-                  heights = c(1, 0.2))
-}
-
 
 ## Setup
-path.out <- args[1]
-
-
-## Data
+p.script.dir <- dirname(sys.frame(1)$ofile)
+p.parent.dir <- dirname(p.script.dir)
+path.in <- as.character(args[1])
+path.out <- as.character(ifelse(length(args) < 2, p.parent.dir, args[2]))
+## Data - to recreate figures from the results
 res <- list()
-res[["CCLE"]] <- readRDS("/local/abarano/Projects/DrugResponse/Results/88x_caretRes/caret.stats.RDS")
-res[["PDX"]] <- readRDS("/local/abarano/Projects/DrugResponse/Results/81k_caretRes/caret.stats.RDS")
-
+res[["CCLE"]] <- readRDS(file.path(path.in, "88x_caretRes/caret.stats.RDS"))
+res[["CCLE_varImp"]] <- read_tsv(file.path(path.in, "88x_caretRes/varImp.tsv")
+res[["PDX.Rep"]] <- readRDS(file.path(path.in, "PDX.Rep_caret.stats.RDS")
 
 ## Plotting
 ### 1
@@ -90,46 +39,32 @@ res$CCLE %>%
   dplyr::filter(pp == "scale+nzv+pca") %>% 
   pivot_wider(, names_from = type, values_from = Rsquare) -> p.pca
 (plot_moImp(p.npca) | plot_moImp(p.pca)) -> p.2
-ggsave(plot = p.1,
+ggsave(plot = p.2,
        filename = file.path(path.out, "CCLE_Improv.MO.pdf"), 
        device = "pdf", width = 10, height = 4)
 
-
-### 3
-res$PDX %>% 
-  dplyr::select(-RMSE, -COR) %>% 
-  dplyr::filter(pp == "scale+nzv") %>% 
-  pivot_wider(, names_from = type, values_from = Rsquare) %>% 
-  mutate(panel = ifelse(is.na(panel), 0, panel),
-         mo = ifelse(is.na(mo), 0, mo)) -> p.pdx
-p.pdx.ordr <- p.pdx %>% arrange(mo) %>% pull(drug)
-res$PDX %>% 
-  dplyr::select(-RMSE, -COR) %>% 
-  dplyr::filter(pp == "scale+nzv+pca") %>% 
-  pivot_wider(, names_from = type, values_from = Rsquare) %>% 
-  mutate(panel = ifelse(is.na(panel), 0, panel),
-         mo = ifelse(is.na(mo), 0, mo)) -> p.pdx.pca
-
-(ggplot(data = p.pdx %>% mutate(drug = factor(drug, levels = p.pdx.ordr))) + 
-    geom_segment(aes(x = panel, xend = mo, y = drug, yend = drug), color = "grey50") +
-    geom_point(aes(x = panel, y = drug), color = "steelblue") + 
-    geom_point(aes(x = mo, y = drug,), color = "orangered") + 
-    lims(x = c(0, 0.25)) +
-    theme_bw() + labs(x = "R-squared", y = "Drug name")) | 
-  (ggplot(data = p.pdx.pca %>% mutate(drug = factor(drug, levels = p.pdx.ordr))) + 
-     geom_segment(aes(x = panel, xend = mo, y = drug, yend = drug), color = "grey50") +
-     geom_point(aes(x = panel, y = drug), color = "steelblue") + 
-     geom_point(aes(x = mo, y = drug,), color = "orangered") + 
-     lims(x = c(0, 0.25)) +
-     theme_bw() + labs(x = "R-squared", y = "Drug name")) -> p.3
+### 3 Process PDX repeated
+res[["PDX.Rep"]] %>% 
+  filter(type == "mo", pp == "scale+nzv", !is.na(Rsquare)) %>% 
+  group_by(drug) %>% 
+  summarize(rsq_med = median(Rsquare), .groups = "drop") %>% 
+  arrange(rsq_med) %>% 
+  pull(drug) -> dr.ord.pdx
+res[["PDX.Rep"]] %>% 
+  mutate(drug = factor(drug, levels = dr.ord.pdx)) %>% 
+  ggplot(data = ., aes(x = Rsquare, y = drug)) + 
+  geom_boxplot(aes(fill = type)) +
+  scale_fill_manual(values = alpha(c("orangered", "steelblue"), 0.67)) + 
+  lims(x = c(0, 0.6)) +
+  theme_bw(base_size = 12) + 
+  labs(x = "R-squared", y = "Drug name") + 
+  facet_grid(. ~ pp) -> p.3
 ggsave(plot = p.3,
        filename = file.path(path.out, "PDX_Improv.MO.pdf"), 
-       device = "pdf", width = 6, height = 4)
+       device = "pdf", width = 6.5, height = 4)
 
-
-### 3
-t.varimp <- read_tsv("/local/abarano/Projects/DrugResponse/Results/88x_caretRes/varImp.tsv")
-t.varimp %>% 
+### 4
+res[["CCLE_varImp"]] %>% 
   group_by(drug) %>% 
   arrange(desc(Overall)) %>% 
   dplyr::slice(1:100) %>% 

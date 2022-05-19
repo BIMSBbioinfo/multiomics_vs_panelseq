@@ -19,6 +19,9 @@
 /data/Results
 /data/growth_rate_results
 
+# result folders
+./beatAML
+
 # R Environment Variables
 multiomics-vs-panelseq-manuscript.Rproj
 

@@ -57,6 +57,7 @@ evaluate_regression_model <- function(y, y_hat) {
 # 2. using mutation features (mut) + rna-seq-based gene-set scores (mut + gex)
 # output: evaluation results of each model for each drug tested 
 run_caret <- function(dat, drugs, drugName) {
+  set.seed(1234)
   samples <- drugs[variable == drugName][!is.na(value)]$name
   selected <- Reduce(intersect, list(samples, colnames(dat$mut), colnames(dat$gex_gs)))
   

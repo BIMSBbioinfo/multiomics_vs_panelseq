@@ -27,10 +27,10 @@ Alternatively, one can directly recreate the figures running this section:
 ## Analysing BeatAML dataset
 
 Below is a description of how to download, process and analyse BeatAML dataset from the [orcestra.ca database](https://www.orcestra.ca/pset/canonical).
-The outputs of the scripts can be found under ./data. 
+The outputs of the scripts can be found under ./data or ./results folders. 
 
 	- data/beatAML.prepared.RDS (output from step 2)
-	- data/beatAML.stats.tsv and data/beatAML.plot.pdf (output from step 3)
+	- results/beatAML.stats.tsv and results/beatAML.plot.pdf (output from step 3)
 
 1. First create a working folder:
 

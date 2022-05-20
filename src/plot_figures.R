@@ -1,19 +1,21 @@
 args = commandArgs(trailingOnly = TRUE)
-require(tidyverse)
-require(janitor)
-require(patchwork)
 
-
-## Setup
-p.script.dir <- getwd()
-p.parent.dir <- dirname(p.script.dir)
-path.in <- as.character(args[1])
+# {SETUP}
+## Paths
+p.parent.dir <- getwd()
+path.in <- as.character(ifelse(is.na(args[1]), p.parent.dir, args[1]))
 path.out <- as.character(ifelse(length(args) < 2, p.parent.dir, args[2]))
+## libraries & functions
+if (!require("tidyverse")) install.packages("tidyverse") else library(tidyverse)
+if (!require("janitor")) install.packages("janitor") else library(janitor)
+if (!require("patchwork")) install.packages("patchwork") else library(patchwork)
+utility_functions <- file.path(p.parent.dir, "src", "F_auxiliary.R")
+source(utility_functions)
 ## Data - to recreate figures from the results
 res <- list()
 res[["CCLE"]] <- readRDS(file.path(path.in, "88x_caretRes/caret.stats.RDS"))
-res[["CCLE_varImp"]] <- read_tsv(file.path(path.in, "88x_caretRes/varImp.tsv")
-res[["PDX.Rep"]] <- readRDS(file.path(path.in, "PDX.Rep_caret.stats.RDS")
+res[["CCLE_varImp"]] <- read_tsv(file.path(path.in, "88x_caretRes/varImp.tsv"))
+res[["PDX.Rep"]] <- readRDS(file.path(path.in, "PDX.Rep_caret.stats.RDS"))
 
 ## Plotting
 ### 1
@@ -53,7 +55,7 @@ res[["PDX.Rep"]] %>%
 res[["PDX.Rep"]] %>% 
   mutate(drug = factor(drug, levels = dr.ord.pdx)) %>% 
   ggplot(data = ., aes(x = Rsquare, y = drug)) + 
-  geom_boxplot(aes(fill = type)) +
+  geom_boxplot(aes(fill = type), size = 0.25, outlier.color = "gray30", outlier.size = 0.7, outlier.alpha = 0.5) +
   scale_fill_manual(values = alpha(c("orangered", "steelblue"), 0.67)) + 
   lims(x = c(0, 0.6)) +
   theme_bw(base_size = 12) + 
@@ -94,12 +96,3 @@ ggplot(data = t.plot.varImp,
 ggsave(plot = p.4,
        filename = file.path(path.out, "CCLE_Improv.Varimp.pdf"), 
        device = "pdf", width = 5.8, height = 4)
-
-
-
-
-
-
-
-
-

@@ -2,16 +2,15 @@ args = commandArgs(trailingOnly = TRUE)
 
 # {SETUP}
 ## Paths
-p.script.dir <- getwd()
-p.parent.dir <- dirname(p.script.dir)
+p.parent.dir <- getwd()
 dset <- as.character(args[1])
 p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data", "Raw", dset)) ## Path to a folder that contains Raw data
 p.aux <- file.path(p.parent.dir, "data", "auxiliary")
 p.out <- ifelse(length(args) >= 3, as.character(args[3]), file.path(p.parent.dir, "data")) ## Path to a folder where the "prepared" will be written
-
 ## libraries & functions
-library(tictoc)
-library(data.table)
+if (!require("tidyverse")) install.packages("tidyverse") else library(tidyverse)
+if (!require("tictoc")) install.packages("tictoc") else library(tictoc)
+if (!require("data.table")) install.packages("data.table") else library(data.table)
 utility_functions <- file.path(p.script.dir, "F_auxiliary.R")
 source(utility_functions)
 
@@ -63,7 +62,6 @@ if (dset == "PDX") {
   #dt <- mut[!is.na(Gene)][!is.na(HGVSp)][, length(Gene), by = c('Gene', 'Sample')]
   #dtc <- dcast.data.table(dt, Gene ~ Sample, value.var = 'V1', fill = 0)
   #setnames(dtc, old = "Gene", new = "gene_id")
-  library(tidyverse)
   dt <- mut %>% 
     dplyr::filter(!is.na(Gene), !is.na(HGVSp)) %>% 
     dplyr::group_by(Sample, Gene) %>% 
@@ -104,5 +102,3 @@ dat <- list('mut' = mut[, selected],
 saveRDS(dat, file = file.path(p.out, paste0("data_", dset, ".RDS")))
 # time stamp
 toc(quiet = FALSE, func.toc = my.msg.toc)
-
-

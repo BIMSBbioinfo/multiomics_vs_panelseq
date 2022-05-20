@@ -2,7 +2,7 @@ args = commandArgs(trailingOnly = TRUE)
 
 # {SETUP}
 ## Paths
-p.script.dir <- dirname(sys.frame(1)$ofile)
+p.script.dir <- getwd()
 p.parent.dir <- dirname(p.script.dir)
 dset <- as.character(args[1])
 p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data", "Raw", dset)) ## Path to a folder that contains Raw data

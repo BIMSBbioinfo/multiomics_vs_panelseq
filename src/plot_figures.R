@@ -5,7 +5,7 @@ require(patchwork)
 
 
 ## Setup
-p.script.dir <- dirname(sys.frame(1)$ofile)
+p.script.dir <- getwd()
 p.parent.dir <- dirname(p.script.dir)
 path.in <- as.character(args[1])
 path.out <- as.character(ifelse(length(args) < 2, p.parent.dir, args[2]))

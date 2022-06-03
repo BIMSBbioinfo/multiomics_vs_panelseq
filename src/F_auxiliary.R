@@ -45,21 +45,21 @@ my.msg.toc <- function(tic, toc, msg, info) {
 plot_pcaImp <- function(data_melted, base.size = 12) {
   (
     (ggplot(data = data_melted, aes(y = `scale+nzv+pca`, x = "")) + 
-       geom_boxplot() + 
+       geom_boxplot(size = 0.5, outlier.color = "gray30", outlier.size = 0.7, outlier.alpha = 0.3) + 
        lims(y = c(0, 0.5)) +
        theme_bw(base_size = base.size) + labs(x = "")
     ) +
       (ggplot(data = data_melted, aes(x = `scale+nzv`, y = `scale+nzv+pca`)) + 
-         geom_point(aes(color = `scale+nzv+pca` - `scale+nzv`)) + 
+         geom_point(aes(color = -(`scale+nzv+pca` - `scale+nzv`))) + 
          geom_abline(intercept = 0, slope = 1) + 
          lims(x = c(0, 0.5), y = c(0, 0.5)) +
-         scale_color_gradientn(colours = terrain.colors(100)) +
+         scale_color_gradientn(colours = terrain.colors(100)[100:1]) +
          theme_bw(base_size = base.size) + labs(x = "", y = "", color = "PCA\nimprovement")
       ) +
       (plot_spacer()
       ) + 
       (ggplot(data = data_melted, aes(x = `scale+nzv`, y = "")) + 
-         geom_boxplot() + 
+         geom_boxplot(size = 0.5, outlier.color = "gray30", outlier.size = 0.7, outlier.alpha = 0.5) + 
          lims(x = c(0, 0.5)) +
          theme_bw(base_size = base.size) + labs(y = "")
       )
@@ -69,7 +69,7 @@ plot_pcaImp <- function(data_melted, base.size = 12) {
 plot_moImp <- function(data_melted, base.size = 12) {
   (
     (ggplot(data = data_melted, aes(y = mo, x = "")) + 
-       geom_boxplot() + 
+       geom_boxplot(size = 0.5, outlier.color = "gray30", outlier.size = 0.7, outlier.alpha = 0.5) + 
        lims(y = c(0, 0.5)) +
        theme_bw(base_size = base.size) + labs(x = "")
     ) +
@@ -77,13 +77,13 @@ plot_moImp <- function(data_melted, base.size = 12) {
          geom_point(aes(color = mo - panel)) + 
          geom_abline(intercept = 0, slope = 1) + 
          lims(x = c(0, 0.5), y = c(0, 0.5)) +
-         scale_color_gradientn(colours = terrain.colors(100)) +
+         scale_color_gradientn(colours = terrain.colors(100)[100:1]) +
          theme_bw(base_size = base.size) + labs(x = "", y = "", color = "Multiomics\nimprovement")
       ) +
       (plot_spacer()
       ) + 
       (ggplot(data = data_melted, aes(x = panel, y = "")) + 
-         geom_boxplot() + 
+         geom_boxplot(size = 0.5, outlier.color = "gray30", outlier.size = 0.7, outlier.alpha = 0.5) + 
          lims(x = c(0, 0.5)) +
          theme_bw(base_size = base.size) + labs(y = "")
       )

@@ -2,19 +2,19 @@ args = commandArgs(trailingOnly = TRUE)
 
 # {SETUP}
 ## Paths
-p.script.dir <- dirname(sys.frame(1)$ofile)
-p.parent.dir <- dirname(p.script.dir)
+p.parent.dir <- getwd()
 dset <-as.character(args[1])    ## Either CCLE or PDX
 p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data")) ## Path to a folder that contains "prepared" data
 p.out <- ifelse(length(args) >= 3, as.character(args[3]), p.parent.dir) ## Path to a folder where the models and their summary statistics will be written
-
 ## libraries & functions
-library(foreach)
-library(tictoc)
-library(data.table)
+if (!require("tidyverse")) install.packages("tidyverse") else library(tidyverse)
+if (!require("foreach")) install.packages("foreach") else library(foreach)
+if (!require("tictoc")) install.packages("tictoc") else library(tictoc)
+if (!require("data.table")) install.packages("data.table") else library(data.table)
+if (!require("furrr")) install.packages("furrr") else library(furrr)
+if (!require("purrr")) install.packages("purrr") else library(purrr)
 utility_functions <- file.path(p.script.dir, "F_auxiliary.R")
 source(utility_functions)
-
 ## read in data
 dat <- readRDS(file.path(p.data, paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data 
@@ -183,7 +183,6 @@ dt <- do.call(rbind,
 saveRDS(dt, file = file.path(p.out, outdir, "caret.stats.RDS"))
 
 ## Estimate feature importance
-require(furrr)
 plan(multisession, workers = 4)
 list.files(file.path(p.out, outdir), 
            pattern = ".caret.RDS", 

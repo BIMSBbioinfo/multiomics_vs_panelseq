@@ -44,21 +44,21 @@ done
 
 ##
 PARENT="https://bimsbstatic.mdc-berlin.de/akalin/AAkalin_PanelvsMulti/"
-if [[$SELECTION == "all"]]; then
+if [[ $SELECTION == "all" ]]; then
     wget -P $OUTPUT $PARENT/"88x_caretRes.tar.gz"
-    tar -xzf $OUTPUT/"88x_caretRes.tar.gz"
+    tar -xzf $OUTPUT/"88x_caretRes.tar.gz" -C $OUTPUT
     rm $OUTPUT/"88x_caretRes.tar.gz"
     wget -P $OUTPUT $PARENT/"data.tar.gz"
-    tar -xzf $OUTPUT/"data.tar.gz"
+    tar -xzf $OUTPUT/"data.tar.gz" -C $OUTPUT
     rm $OUTPUT/"data.tar.gz"
     wget -P $OUTPUT $PARENT/"PDX.Rep_caret.stats.RDS"
-elif [[$SELECTION == "raw"]]; then
+elif [[ $SELECTION == "raw" ]]; then
     wget -P $OUTPUT $PARENT/"data.tar.gz"
-    tar -xzf $OUTPUT/"data.tar.gz"
+    tar -xzf $OUTPUT/"data.tar.gz" -C $OUTPUT
     rm $OUTPUT/"data.tar.gz"
-elif [[$SELECTION == "proc"]]; then
+elif [[ $SELECTION == "proc" ]]; then
     wget -P $OUTPUT $PARENT/"88x_caretRes.tar.gz"
-    tar -xzf $OUTPUT/"88x_caretRes.tar.gz"
+    tar -xzf $OUTPUT/"88x_caretRes.tar.gz" -C $OUTPUT
     rm $OUTPUT/"88x_caretRes.tar.gz"
     wget -P $OUTPUT $PARENT/"PDX.Rep_caret.stats.RDS"
 fi

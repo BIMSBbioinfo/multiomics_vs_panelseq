@@ -10,7 +10,11 @@ library(ranger)
 library(MetBrewer)
 ggplot2::theme_set(ggpubr::theme_pubclean())
 
-dat <- readRDS('./beatAML.prepared.RDS')
+args <- commandArgs(trailingOnly = T)
+
+beatAML_prepared_data <- args[1] 
+ 
+dat <- readRDS(beatAML_prepared_data)
 
 # define a function to train a random forest model using 
 # a repeated-cross-validation procedure using caret. 
@@ -117,10 +121,23 @@ write.table(dcast(results, drug ~ type, value.var = c('RMSE', 'COR', 'Rsquare'))
             file = 'beatAML.stats.tsv', sep = '\t', quote = F)
 
 # make summary figure 
-p <- ggboxplot(results, x = 'type', y = 'COR', add = 'jitter', 
-          color = 'type') + 
-  stat_compare_means(paired = T, method.args = list('alternative' = 'greater')) + 
-  scale_color_manual(values = MetBrewer::met.brewer(name = 'VanGogh2', n = 2))
+
+dt <- dcast.data.table(results, drug ~ type, value.var = 'Rsquare')
+dt$improvement <- dt$multiomics - dt$panel
+p1 <- ggplot(dt,
+       aes(x = panel, y = multiomics)) +
+  geom_point(aes(color = improvement), size = 3) + geom_abline(slope = 1) + 
+  coord_fixed() + 
+  lims(x = c(0, 0.5), y = c(0, 0.5)) + 
+  theme_bw(base_size = 14) +
+  scale_color_gradient2(low = 'black', mid = 'gray', high = 'red') +
+  labs(color = "Multiomics\nimprovement")
+
+p2 <- ggboxplot(results, x = 'type', y = 'Rsquare', add = 'jitter') + 
+  stat_compare_means(paired = T, method.args = list('alternative' = 'greater')) +
+  theme_bw(base_size = 14) 
+
+p <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(2, 1))
 
 ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 6, height = 6)
 message(date(), "=> Finished!")

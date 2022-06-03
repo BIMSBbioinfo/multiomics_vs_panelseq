@@ -139,7 +139,7 @@ p2 <- ggboxplot(results, x = 'type', y = 'Rsquare', add = 'jitter') +
 
 p <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(2, 1))
 
-ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 6, height = 6)
+ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 12, height = 6) #, width = 6, height = 6)
 message(date(), "=> Finished!")
 
 

@@ -61,5 +61,5 @@ statistics will be generated for each drug.
 The generated stats are saved in beatAML.stats.tsv, and a summary figure is created in beatAML.plot.pdf. 
 
   ```
-  Rscript ../src/beatAML_analysis/analysis.R
+  Rscript ../src/beatAML_analysis/analysis.R ../data/beatAML.prepared.RDS
   ```

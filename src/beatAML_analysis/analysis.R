@@ -22,9 +22,9 @@ dat <- readRDS(beatAML_prepared_data)
 train_caret <- function(df) {
   require(caret)
   tgrid <- expand.grid(
-    .mtry =  seq(from = 10, to = round(sqrt(ncol(df))), 10),
-    .splitrule = 'variance',
-    .min.node.size = c(5,10,15)
+    .mtry =  seq(from = 5, to = round(sqrt(ncol(df))), 5),
+    .splitrule = c('variance', 'extratrees', 'maxstat', 'beta'),
+    .min.node.size =  seq(5, 20, 5)
   )
   cl <- parallel::makePSOCKcluster(5)
   doParallel::registerDoParallel(cl)

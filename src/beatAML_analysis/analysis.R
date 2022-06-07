@@ -94,6 +94,10 @@ run_caret <- function(dat, drugs, drugName) {
   stats <- rbind(panel.stats, mo.stats)
   stats$type <- c('panel', 'multiomics')
   
+  stats$total_sample_count <- length(selected)
+  stats$training_sample_count <- length(train_samples)
+  stats$testing_sample_count <- length(test_samples)
+  
   return(stats)
 }
 
@@ -117,7 +121,8 @@ parallel::stopCluster(cl)
 saveRDS(results, file = 'beatAML.stats.RDS')
 
 # write table 
-write.table(dcast(results, drug ~ type, value.var = c('RMSE', 'COR', 'Rsquare')), 
+write.table(dcast(results, drug + total_sample_count + training_sample_count + testing_sample_count ~ type, 
+                  value.var = c('RMSE', 'COR', 'Rsquare')),
             file = 'beatAML.stats.tsv', sep = '\t', quote = F)
 
 # make summary figure 
@@ -139,7 +144,7 @@ p2 <- ggboxplot(results, x = 'type', y = 'Rsquare', add = 'jitter') +
 
 p <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(2, 1))
 
-ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 12, height = 6) #, width = 6, height = 6)
+ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 12, height = 6) 
 message(date(), "=> Finished!")
 
 

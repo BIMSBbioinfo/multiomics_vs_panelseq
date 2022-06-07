@@ -136,15 +136,20 @@ p1 <- ggplot(dt,
   lims(x = c(0, 0.5), y = c(0, 0.5)) + 
   theme_bw(base_size = 12) +
   scale_color_gradient2(low = 'black', mid = 'gray', high = 'red') +
-  labs(color = "Multiomics\nimprovement")
+  labs(color = "Multiomics\nimprovement") + 
+  theme(legend.position = 'top')
 
 p2 <- ggboxplot(results, x = 'type', y = 'Rsquare', add = 'jitter') + 
-  stat_compare_means(paired = T, method.args = list('alternative' = 'greater')) +
-  theme_bw(base_size = 12) 
+  stat_compare_means(paired = T, method.args = list('alternative' = 'greater'),
+                     label.x = 2.2, label.y = 0.3)+
+  theme_bw(base_size = 12) + 
+  theme(axis.title.y = element_blank()) + 
+  coord_flip()
 
-p <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(2, 1))
+p <- cowplot::plot_grid(p1, p2, 
+                   ncol = 1, rel_heights = c(3, 1))
 
-ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 12, height = 6) 
+ggsave(filename = 'beatAML.plot.pdf', plot = p, width = 5, height = 7) 
 message(date(), "=> Finished!")
 
 

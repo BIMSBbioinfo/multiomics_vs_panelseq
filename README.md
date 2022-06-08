@@ -63,3 +63,10 @@ The generated stats are saved in beatAML.stats.tsv, and a summary figure is crea
   ```
   Rscript ../src/beatAML_analysis/analysis.R ../data/beatAML.prepared.RDS
   ```
+
+The summary figure can also be separately plotted using the plot_summary.R script. 
+
+  ```
+   Rscript ../src/beatAML_analysis/plot_summar.R ../results/beatAML.stats.tsv
+  ```
+

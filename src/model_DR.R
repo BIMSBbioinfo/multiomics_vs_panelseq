@@ -172,6 +172,15 @@ dt <- do.call(rbind,
                                      x$panel$panel.stats.pca,
                                      x$mo$mo.stats,
                                      x$mo$mo.stats.pca)
+                         dt$total_sample_count <- rep(c(x$mo$total_sample_count,
+                                                        x$panel$total_sample_count), 
+                                                      2),
+                         dt$training_sample_count <- rep(c(x$mo$training_sample_count,
+                                                           x$panel$training_sample_count), 
+                                                      2),
+                         dt$testing_sample_count <- rep(c(x$mo$testing_sample_count,
+                                                          x$panel$testing_sample_count), 
+                                                      2),
                          dt$type <- rep(c("panel", "mo"), each = 2)
                          dt$pp <- rep(c("scale+nzv", "scale+nzv+pca"), 2)
                          dt$model <- rep("glm", 4)

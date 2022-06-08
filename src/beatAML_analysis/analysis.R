@@ -24,9 +24,9 @@ train_caret <- function(df) {
   tgrid <- expand.grid(
     .mtry =  seq(from = 5, to = round(sqrt(ncol(df))), 5),
     .splitrule = c('variance', 'extratrees', 'maxstat', 'beta'),
-    .min.node.size =  seq(5, 20, 5)
+    .min.node.size =  seq(5, 25, 5)
   )
-  cl <- parallel::makePSOCKcluster(5)
+  cl <- parallel::makePSOCKcluster(4)
   doParallel::registerDoParallel(cl)
   set.seed(1234)
   model_caret <- train(y  ~ ., 
@@ -36,7 +36,7 @@ train_caret <- function(df) {
                                                 verboseIter = T, repeats = 5),
                        tuneGrid = tgrid,
                        preProcess = c('center', 'scale', 'nzv'), 
-                       num.trees = 500,
+                       num.trees = 1500,
                        importance = "permutation", 
                        num.threads = 2)
   parallel::stopCluster(cl)
@@ -106,7 +106,7 @@ message(date(), "=> Started modelling")
 drugs <- dat$drugs
 candidates <- as.character(drugs[!is.na(value),length(name),by=variable][V1 > 100]$variable)
 
-cl <- parallel::makeCluster(10)
+cl <- parallel::makeCluster(8)
 parallel::clusterExport(cl = cl, varlist = c('dat', 'drugs', 'evaluate_regression_model',
                                              'run_caret', 'train_caret'))
 results <- do.call(rbind, pbapply::pblapply(cl = cl, candidates, function(d) {

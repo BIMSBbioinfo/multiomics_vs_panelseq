@@ -13,7 +13,7 @@ if (!require("tictoc")) install.packages("tictoc") else library(tictoc)
 if (!require("data.table")) install.packages("data.table") else library(data.table)
 if (!require("furrr")) install.packages("furrr") else library(furrr)
 if (!require("purrr")) install.packages("purrr") else library(purrr)
-utility_functions <- file.path(p.script.dir, "F_auxiliary.R")
+utility_functions <- file.path("F_auxiliary.R")
 source(utility_functions)
 ## read in data
 dat <- readRDS(file.path(p.data, paste0("data_", dset, ".RDS")))

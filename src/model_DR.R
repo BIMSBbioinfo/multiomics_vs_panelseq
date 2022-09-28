@@ -16,7 +16,7 @@ if (!require("purrr")) install.packages("purrr") else library(purrr)
 #utility_functions <- file.path("F_auxiliary.R")
 source("src/F_auxiliary.R")
 ## read in data
-dat <- readRDS(file.path(p.data, "Raw", paste0("data_", dset, ".RDS")))
+dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data
 
 # {MAIN}

@@ -187,7 +187,6 @@ if (!dir.exists(file.path(p.out, outdir))) {
 # start the parallelization
 cl <- parallel::makeForkCluster(15)
 doParallel::registerDoParallel(cl)
-start <- Sys.time ()
 results <- foreach(drug = candidates) %dopar% {
   r <- run_caret(dat, dr, drugName = drug)
   saveRDS(r, file = file.path(p.out, outdir, paste0(drug, ".caret.RDS")))
@@ -195,8 +194,6 @@ results <- foreach(drug = candidates) %dopar% {
 }
 parallel::stopCluster(cl)
 toc(quiet = FALSE, func.toc = my.msg.toc)
-finish <- Sys.time () - start
-saveRDS(finish,"data/finish.RDS")
 
 ## assemble model stats
 names(results) <- candidates

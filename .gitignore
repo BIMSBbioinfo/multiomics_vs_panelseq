@@ -5,6 +5,7 @@
 # User-specific files
 .Ruserdata
 .RData
+deneme.R
 
 # RStudio files
 .Rproj.user/

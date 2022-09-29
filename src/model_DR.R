@@ -17,6 +17,7 @@ if (!require("purrr")) install.packages("purrr") else library(purrr)
 source("src/F_auxiliary.R")
 ## read in data
 dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
+#dat <- readRDS(file.path(p.data, paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data
 
 # {MAIN}
@@ -43,7 +44,6 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
     importance = "permutation",
     num.threads = 2
   )
-  parallel::stopCluster(cl)
   return(model_caret)
 }
 train_caret.glm <- function(df, ppOpts = c("center", "scale")) {
@@ -172,17 +172,22 @@ tic(msg = "Modelling", quiet = FALSE, func.tic = my.msg.tic)
 # remove missing
 dr <- dr[!is.na(dr$value)][!is.na(sample_id)][!is.na(column_name)]
 dr$column_name <- gsub("/", "-", dr$column_name)
-candidates <- names(which(table(dr[column_name != "untreated"]$column_name) > as.numeric(args[2])))
+#candidates <- names(which(table(dr[column_name != "untreated"]$column_name) > as.numeric(args[2])))
+candidates <- names(table(dr[column_name != "untreated"]$column_name))
+candidates <- candidates[!(candidates %in% "")]
 
 # assign a unique identifier to the modelling run
 run.code <- paste0(sample(1:1e2, 1), sample(letters, 1))
-outdir <- paste0(run.code, "_", dset, "_caretRes")
+#outdir <- paste0(run.code, "_", dset, "_caretRes")
+outdir <-"41c_CCLE_caretRes"
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
-}
+}  
+
 # start the parallelization
-cl <- parallel::makeForkCluster(20)
+cl <- parallel::makeForkCluster(15)
 doParallel::registerDoParallel(cl)
+start <- Sys.time ()
 results <- foreach(drug = candidates) %dopar% {
   r <- run_caret(dat, dr, drugName = drug)
   saveRDS(r, file = file.path(p.out, outdir, paste0(drug, ".caret.RDS")))
@@ -190,6 +195,8 @@ results <- foreach(drug = candidates) %dopar% {
 }
 parallel::stopCluster(cl)
 toc(quiet = FALSE, func.toc = my.msg.toc)
+finish <- Sys.time () - start
+saveRDS(finish,"data/finish.RDS")
 
 ## assemble model stats
 names(results) <- candidates
@@ -240,3 +247,55 @@ dt <- do.call(
 )
 saveRDS(dt, file = file.path(p.out, outdir, "caret.stats.RDS"))
 
+## Estimate feature importance glmnet
+plan(multisession, workers = 4)
+list.files(file.path(p.out, outdir),
+           pattern = ".caret.RDS",
+           full.names = T
+) %>%
+  future_map(
+    .,
+    ~ caret::varImp(readRDS(.x)$mo$mo.fit)$importance
+  ) -> l.varimp
+names(l.varimp) <- list.files(file.path(p.out, outdir),
+                              pattern = ".caret.RDS",
+                              full.names = F
+) %>%
+  basename() %>%
+  str_remove(., ".caret.RDS")
+purrr::map2(
+  l.varimp,
+  names(l.varimp),
+  ~ .x %>%
+    as_tibble(rownames = "Feature") %>%
+    mutate(drug = .y)
+) %>%
+  purrr::reduce(., rbind) -> t.varimp
+write_tsv(t.varimp, file.path(p.out, outdir, "varImp.tsv"))
+
+
+## Estimate feature importance rf
+list.files(file.path(p.out, outdir),
+           pattern = ".caret.RDS",
+           full.names = T
+) %>%
+  future_map(
+    .,
+    ~ caret::varImp(readRDS(.x)$mo$mo.fit.rf)$importance
+  ) -> l.varimp
+names(l.varimp) <- list.files(file.path(p.out, outdir),
+                              pattern = ".caret.RDS",
+                              full.names = F
+) %>%
+  basename() %>%
+  str_remove(., ".caret.RDS")
+purrr::map2(
+  l.varimp,
+  names(l.varimp),
+  ~ .x %>%
+    as_tibble(rownames = "Feature") %>%
+    mutate(drug = .y)
+) %>%
+  purrr::reduce(., rbind) -> t.varimp
+write_tsv(t.varimp, file.path(p.out, outdir, "varImp_rf.tsv"))
+message(date(), "\nFinished!")

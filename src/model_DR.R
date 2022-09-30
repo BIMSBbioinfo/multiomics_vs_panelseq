@@ -27,42 +27,40 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
   tgrid <- expand.grid(
     .mtry = seq(from = 10, to = round(sqrt(ncol(df))), 10),
     .splitrule = "variance",
-    .min.node.size = c(5, 10, 15)
+    .min.node.size = c(10, 20)
   )
+  set.seed(1234)
   model_caret <- train(y ~ .,
     data = df,
     method = "ranger",
     trControl = trainControl(
       method = "repeatedcv", number = 5,
-      verboseIter = T, repeats = 3
+      verboseIter = T, repeats = 2
     ),
     tuneGrid = tgrid,
     preProcess = ppOpts,
     num.trees = 500,
-    importance = "permutation"
-    #num.threads = 2
+    importance = "permutation",
+    num.threads = 2
   )
   return(model_caret)
 }
 train_caret.glm <- function(df, ppOpts = c("center", "scale")) {
   require(caret)
-  tgrid <- expand.grid(
-    .alpha = seq(0, 1, length = 10),
-    .lambda = seq(0.0001, 1, length = 20)
-  )
+  set.seed(1234)
   model_caret <- train(y ~ .,
     data = df,
     method = "glmnet",
     trControl = trainControl(
       method = "repeatedcv", number = 5,
-      verboseIter = T, repeats = 3
+      verboseIter = T, repeats = 2
     ),
-    tuneGrid = tgrid,
     preProcess = ppOpts
   )
   return(model_caret)
 }
 run_caret <- function(dat, dr, drugName) {
+  set.seed(1234)
   selected <- intersect(dr[column_name == drugName]$sample_id, colnames(dat$mut))
   colData <- dr[column_name == drugName][match(selected, sample_id)]
 
@@ -77,18 +75,6 @@ run_caret <- function(dat, dr, drugName) {
 
   y.train <- colData[match(train_samples, sample_id)]$value
   y.test <- colData[match(test_samples, sample_id)]$value
-
-  # compute results for mut+cnv features (exomeseq) -------------------
-  # message(date(), " => processing exomseq")
-  # ex.train <- data.frame(do.call(cbind, lapply(dat.raw[c('mut', 'cnv')],
-  #                                              function(x) t(x[,train_samples]))),
-  #                        check.names = F)
-  # ex.train$y <- y.train
-  # ex.test <- data.frame(do.call(cbind, lapply(dat.raw[c('mut', 'cnv')],
-  #                                             function(x) t(x[,test_samples]))),
-  #                       check.names = F)
-  # ex.test$y <- y.test
-  # ex.fit.rf.pca <- train_caret.rf(ex.train, c("center", "scale", "nzv", "pca"))
 
   # compute results for panel --------------------------------------------------
   message(date(), " => processing panel")
@@ -113,7 +99,6 @@ run_caret <- function(dat, dr, drugName) {
   panel.fit.rf.pca <- train_caret.rf(panel.train, c("center", "scale", "nzv", "pca"))
   panel.fit.glm <- train_caret.glm(panel.train, c("center", "scale", "nzv"))
   panel.fit.glm.pca <- train_caret.glm(panel.train, c("center", "scale", "nzv", "pca"))
-
 
 
   # compute results for mut+cnv+gex features (mo=multiomics) -------------------
@@ -174,6 +159,8 @@ dr$column_name <- gsub("/", "-", dr$column_name)
 candidates <- names(table(dr[column_name != "untreated"]$column_name))
 candidates <- candidates[!(candidates %in% "")]
 
+message("Modelling for ",length(candidates)," drugs")
+
 # assign a unique identifier to the modelling run
 run.code <- paste0(sample(1:1e2, 1), sample(letters, 1))
 outdir <- paste0(run.code, "_", dset, "_caretRes")
@@ -182,7 +169,7 @@ if (!dir.exists(file.path(p.out, outdir))) {
 }  
 
 # start the parallelization
-cl <- parallel::makeForkCluster(15)
+cl <- parallel::makeForkCluster(40)
 doParallel::registerDoParallel(cl)
 results <- foreach(drug = candidates) %dopar% {
   r <- run_caret(dat, dr, drugName = drug)

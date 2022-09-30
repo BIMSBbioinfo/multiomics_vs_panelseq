@@ -4,6 +4,7 @@ args <- commandArgs(trailingOnly = TRUE)
 ## Paths
 p.parent.dir <- getwd()
 dset <- as.character(args[1]) ## Either CCLE or PDX
+outdir <- args[2] #path to where to save the data
 p.data <- ifelse(length(args) >= 2, as.character(args[2]), file.path(p.parent.dir, "data")) ## Path to a folder that contains "prepared" data
 p.out <- ifelse(length(args) >= 3, as.character(args[3]), p.parent.dir) ## Path to a folder where the models and their summary statistics will be written
 ## libraries & functions
@@ -155,25 +156,26 @@ tic(msg = "Modelling", quiet = FALSE, func.tic = my.msg.tic)
 # remove missing
 dr <- dr[!is.na(dr$value)][!is.na(sample_id)][!is.na(column_name)]
 dr$column_name <- gsub("/", "-", dr$column_name)
-#candidates <- names(which(table(dr[column_name != "untreated"]$column_name) > as.numeric(args[2])))
 candidates <- names(table(dr[column_name != "untreated"]$column_name))
 candidates <- candidates[!(candidates %in% "")]
 
 message("Modelling for ",length(candidates)," drugs")
 
 # assign a unique identifier to the modelling run
-run.code <- paste0(sample(1:1e2, 1), sample(letters, 1))
-outdir <- paste0(run.code, "_", dset, "_caretRes")
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }  
 
 # start the parallelization
-cl <- parallel::makeForkCluster(40)
+cl <- parallel::makeForkCluster(30)
 doParallel::registerDoParallel(cl)
 results <- foreach(drug = candidates) %dopar% {
-  r <- run_caret(dat, dr, drugName = drug)
-  saveRDS(r, file = file.path(p.out, outdir, paste0(drug, ".caret.RDS")))
+  f <- file.path(p.out, outdir, paste0(drug, ".caret.RDS"))
+  if(!file.exists(f)) {
+    r <- run_caret(dat, dr, drugName = drug)
+    saveRDS(r, file = f)
+  }
+  r <- readRDS(f)
   return(r)
 }
 parallel::stopCluster(cl)

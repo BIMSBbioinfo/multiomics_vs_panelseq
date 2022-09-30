@@ -118,9 +118,9 @@ run_caret <- function(dat, drugs, drugName) {
   )
   mo.fit.glm <- train_caret.glm(mo.train)
   mo.fit <- train_caret(mo.train)
+  
   panel.stats <- evaluate_regression_model(panel.test$y, predict(panel.fit, panel.test))
   mo.stats <- evaluate_regression_model(mo.test$y, predict(mo.fit, mo.test))
-
   panel.stats.glm <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm, panel.test))
   mo.stats.glm <- evaluate_regression_model(mo.test$y, predict(mo.fit.glm, mo.test))
 
@@ -131,6 +131,20 @@ run_caret <- function(dat, drugs, drugName) {
   stats$training_sample_count <- length(train_samples)
   stats$testing_sample_count <- length(test_samples)
 
+  # output
+  rt <- list(
+    panel = list(
+      "panel.fit" = panel.fit, "panel.stats" = panel.stats,
+      "panel.test" = panel.test,
+      "panel.fit.glm" = panel.fit.glm, "panel.stats.glm" = panel.stats.glm
+    ),
+    mo = list(
+      "mo.fit" = mo.fit, "mo.stats" = mo.stats,
+      "mo.test" = mo.test,
+      "mo.fit.glm" = mo.fit.glm, "mo.stats.glm" = mo.stats.glm
+    ))
+  saveRDS(rt, file = paste0("data/beatAML/",drugName, ".caret.RDS"))
+  
   return(stats)
 }
 
@@ -138,6 +152,10 @@ message(date(), "=> Started modelling")
 
 drugs <- dat$drugs
 candidates <- as.character(drugs[!is.na(value), length(name), by = variable][V1 > 100]$variable)
+
+if (!dir.exists(file.path("data/beatAML"))) {
+  dir.create(file.path("data/beatAML"))
+}  
 
 cl <- parallel::makeCluster(8)
 parallel::clusterExport(cl = cl, varlist = c(
@@ -198,6 +216,35 @@ for (md in c("rf", "glm")) {
   )
 
   ggsave(filename = paste0("beatAML.", md, ".plot.pdf"), plot = p, width = 5, height = 7)
+}
+
+#Variable importance
+## Estimate feature importance glmnet
+plan(multisession, workers = 4)
+for (v in c("mo.fit","mo.fit.glm")) {
+  list.files(file.path("data/beatAML/"),
+             pattern = ".caret.RDS",
+             full.names = T
+  ) %>%
+    furrr::future_map(
+      .,
+      ~ caret::varImp(readRDS(.x)$mo[[v]])$importance
+    ) -> l.varimp
+  names(l.varimp) <- list.files(file.path("data/beatAML/"),
+                                pattern = ".caret.RDS",
+                                full.names = F
+  ) %>%
+    basename() %>%
+    stringr::str_remove(., ".caret.RDS")
+  purrr::map2(
+    l.varimp,
+    names(l.varimp),
+    ~ .x %>%
+      tibble::as_tibble(rownames = "Feature") %>%
+      mutate(drug = .y)
+  ) %>%
+    purrr::reduce(., rbind) -> t.varimp
+  write_tsv(t.varimp, file.path("data/beatAML/",v, "varImp.tsv"))
 }
 
 message(date(), "=> Finished!")

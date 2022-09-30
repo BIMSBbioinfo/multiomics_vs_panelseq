@@ -29,8 +29,6 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
     .splitrule = "variance",
     .min.node.size = c(5, 10, 15)
   )
-  cl <- parallel::makePSOCKcluster(2)
-  doParallel::registerDoParallel(cl)
   model_caret <- train(y ~ .,
     data = df,
     method = "ranger",
@@ -41,8 +39,8 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
     tuneGrid = tgrid,
     preProcess = ppOpts,
     num.trees = 500,
-    importance = "permutation",
-    num.threads = 2
+    importance = "permutation"
+    #num.threads = 2
   )
   return(model_caret)
 }
@@ -178,8 +176,7 @@ candidates <- candidates[!(candidates %in% "")]
 
 # assign a unique identifier to the modelling run
 run.code <- paste0(sample(1:1e2, 1), sample(letters, 1))
-#outdir <- paste0(run.code, "_", dset, "_caretRes")
-outdir <-"41c_CCLE_caretRes"
+outdir <- paste0(run.code, "_", dset, "_caretRes")
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }  

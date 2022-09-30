@@ -46,6 +46,28 @@ train_caret <- function(df) {
   return(model_caret)
 }
 
+train_caret.glm <- function(df) {
+  require(caret)
+  tgrid <- expand.grid(
+    .alpha = seq(0, 1, length = 10),
+    .lambda = seq(0.0001, 1, length = 20)
+  )
+  cl <- parallel::makePSOCKcluster(8)
+  doParallel::registerDoParallel(cl)
+  model_caret <- train(y ~ .,
+    data = df,
+    method = "glmnet",
+    trControl = trainControl(
+      method = "repeatedcv", number = 5,
+      verboseIter = T, repeats = 3
+    ),
+    preProcess = c("center", "scale", "nzv"),
+    tuneGrid = tgrid
+  )
+  parallel::stopCluster(cl)
+  return(model_caret)
+}
+
 # function to evaluate a regression model's performance
 evaluate_regression_model <- function(y, y_hat) {
   require(caret)
@@ -81,6 +103,7 @@ run_caret <- function(dat, drugs, drugName) {
   message(date(), " => processing panel")
   panel.train <- cbind(data.frame(mut[train_samples, ]), data.frame("y" = y.train))
   panel.test <- cbind(data.frame(mut[test_samples, ]), data.frame("y" = y.test))
+  panel.fit.glm <- train_caret.glm(panel.train)
   panel.fit <- train_caret(panel.train)
 
   # compute results for mut+gex features (mo=multiomics)
@@ -93,14 +116,17 @@ run_caret <- function(dat, drugs, drugName) {
     mut[test_samples, ], gex[test_samples, ],
     data.frame("y" = y.test)
   )
+  mo.fit.glm <- train_caret.glm(mo.train)
   mo.fit <- train_caret(mo.train)
-
   panel.stats <- evaluate_regression_model(panel.test$y, predict(panel.fit, panel.test))
   mo.stats <- evaluate_regression_model(mo.test$y, predict(mo.fit, mo.test))
 
-  stats <- rbind(panel.stats, mo.stats)
-  stats$type <- c("panel", "multiomics")
+  panel.stats.glm <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm, panel.test))
+  mo.stats.glm <- evaluate_regression_model(mo.test$y, predict(mo.fit.glm, mo.test))
 
+  stats <- rbind(panel.stats, mo.stats, panel.stats.glm, mo.stats.glm)
+  stats$type <- rep(c("panel", "multiomics"), 2)
+  stats$model <- c(rep("rf", 2), rep("glm", 2))
   stats$total_sample_count <- length(selected)
   stats$training_sample_count <- length(train_samples)
   stats$testing_sample_count <- length(test_samples)
@@ -116,7 +142,7 @@ candidates <- as.character(drugs[!is.na(value), length(name), by = variable][V1 
 cl <- parallel::makeCluster(8)
 parallel::clusterExport(cl = cl, varlist = c(
   "dat", "drugs", "evaluate_regression_model",
-  "run_caret", "train_caret"
+  "run_caret", "train_caret", "train_caret.glm"
 ))
 results <- do.call(rbind, pbapply::pblapply(cl = cl, candidates, function(d) {
   require(data.table)
@@ -130,41 +156,48 @@ parallel::stopCluster(cl)
 saveRDS(results, file = "beatAML.stats.RDS")
 
 # write table
-write.table(dcast(results, drug + total_sample_count + training_sample_count + testing_sample_count ~ type,
+write.table(dcast(results, drug + total_sample_count + training_sample_count + testing_sample_count ~ type + model,
   value.var = c("RMSE", "COR", "Rsquare")
 ),
 file = "beatAML.stats.tsv", sep = "\t", quote = F
 )
 
 # make summary figure
-
-dt <- dcast.data.table(results, drug ~ type, value.var = "Rsquare")
-dt$improvement <- dt$multiomics - dt$panel
-p1 <- ggplot(
-  dt,
-  aes(x = panel, y = multiomics)
-) +
-  geom_point(aes(color = improvement), size = 3) +
-  geom_abline(slope = 1) +
-  coord_fixed() +
-  lims(x = c(0, 0.5), y = c(0, 0.5)) +
-  theme_bw(base_size = 12) +
-  scale_color_gradient2(low = "black", mid = "gray", high = "red") +
-  labs(color = "Multiomics\nimprovement") +
-  theme(legend.position = "top")
-
-p2 <- ggboxplot(results, x = "type", y = "Rsquare", add = "jitter") +
-  stat_compare_means(
-    paired = T, method.args = list("alternative" = "greater"),
-    label.x = 2.2, label.y = 0.3
+dt <- dcast.data.table(results, drug ~ type + model, value.var = "Rsquare")
+dt$improvement_glm <- dt$multiomics_glm - dt$panel_glm
+dt$improvement_rf <- dt$multiomics_rf - dt$panel_rf
+for (md in c("rf", "glm")) {
+  require(dplyr)
+  da <- dt %>% dplyr::select(drug, ends_with(md))
+  names(da) <- gsub(pattern = paste0("_", md), replacement = "", x = names(da))
+  p1 <- ggplot(
+    da,
+    aes(x = panel, y = multiomics)
   ) +
-  theme_bw(base_size = 12) +
-  theme(axis.title.y = element_blank()) +
-  coord_flip()
+    geom_point(aes(color = improvement), size = 3) +
+    geom_abline(slope = 1) +
+    coord_fixed() +
+    lims(x = c(0, 0.5), y = c(0, 0.5)) +
+    theme_bw(base_size = 12) +
+    scale_color_gradient2(low = "black", mid = "gray", high = "red") +
+    labs(color = "Multiomics\nimprovement") +
+    theme(legend.position = "top")
 
-p <- cowplot::plot_grid(p1, p2,
-  ncol = 1, rel_heights = c(3, 1)
-)
+  p2 <- results[results$model == md] %>%
+    ggboxplot(x = "type", y = "Rsquare", add = "jitter") +
+    stat_compare_means(
+      paired = T, method.args = list("alternative" = "greater"),
+      label.x = 2.2, label.y = 0.3
+    ) +
+    theme_bw(base_size = 12) +
+    theme(axis.title.y = element_blank()) +
+    coord_flip()
 
-ggsave(filename = "beatAML.plot.pdf", plot = p, width = 5, height = 7)
+  p <- cowplot::plot_grid(p1, p2,
+    ncol = 1, rel_heights = c(3, 1)
+  )
+
+  ggsave(filename = paste0("beatAML.", md, ".plot.pdf"), plot = p, width = 5, height = 7)
+}
+
 message(date(), "=> Finished!")

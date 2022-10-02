@@ -58,6 +58,7 @@ train_caret.glm <- function(df, ppOpts = c("center", "scale")) {
   )
   return(model_caret)
 }
+
 run_caret <- function(dat, dr, drugName) {
   set.seed(1234)
   selected <- intersect(dr[column_name == drugName]$sample_id, colnames(dat$mut))
@@ -157,126 +158,25 @@ dr$column_name <- gsub("/", "-", dr$column_name)
 candidates <- names(table(dr[column_name != "untreated"]$column_name))
 candidates <- candidates[!(candidates %in% "")]
 
-message("Modelling for ",length(candidates)," drugs")
+candidates <- c('TPCA-1', 'VENETOCLAX', 'METHOTREXATE', 'I-BET-762', 'LEFLUNOMIDE')
+
+message(date()," => Modelling for ",length(candidates)," drugs")
 outdir <- dset # create a subfolder on the target path for each dataset
 # assign a unique identifier to the modelling run
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }  
 
-# start the parallelization
+
 cl <- parallel::makeForkCluster(30)
 doParallel::registerDoParallel(cl)
-results <- foreach(drug = candidates) %dopar% {
+foreach(drug = candidates) %dopar% {
   f <- file.path(p.out, outdir, paste0(drug, ".caret.RDS"))
   if(!file.exists(f)) {
     r <- run_caret(dat, dr, drugName = drug)
     saveRDS(r, file = f)
   }
-  r <- readRDS(f)
-  return(r)
 }
 parallel::stopCluster(cl)
-toc(quiet = FALSE, func.toc = my.msg.toc)
 
-## assemble model stats
-names(results) <- candidates
-dt <- do.call(
-  rbind,
-  lapply(
-    names(results),
-    function(drug) {
-      x <- results[[drug]]
-      dt <- rbind(
-        x$panel$panel.stats,
-        x$panel$panel.stats.pca,
-        x$panel$panel.stats.rf,
-        x$panel$panel.stats.rf.pca,
-        x$mo$mo.stats,
-        x$mo$mo.stats.pca,
-        x$mo$mo.stats.rf,
-        x$mo$mo.stats.rf.pca
-      )
-      dt$total_sample_count <- rep(
-        c(
-          x$mo$total_sample_count,
-          x$panel$total_sample_count
-        ),
-        4
-      )
-      dt$training_sample_count <- rep(
-        c(
-          x$mo$training_sample_count,
-          x$panel$training_sample_count
-        ),
-        4
-      )
-      dt$testing_sample_count <- rep(
-        c(
-          x$mo$testing_sample_count,
-          x$panel$testing_sample_count
-        ),
-        4
-      )
-      dt$type <- rep(c("panel", "mo"), each = 4)
-      dt$pp <- rep(c("scale+nzv", "scale+nzv+pca"), 4)
-      dt$model <- rep(c(rep("glm", 2),rep("rf", 2)),2)
-      dt$drug <- rep(drug, 8)
-      return(dt)
-    }
-  )
-)
-saveRDS(dt, file = file.path(p.out, outdir, "caret.stats.RDS"))
-
-## Estimate feature importance glmnet
-plan(multisession, workers = 4)
-list.files(file.path(p.out, outdir),
-           pattern = ".caret.RDS",
-           full.names = T
-) %>%
-  future_map(
-    .,
-    ~ caret::varImp(readRDS(.x)$mo$mo.fit)$importance
-  ) -> l.varimp
-names(l.varimp) <- list.files(file.path(p.out, outdir),
-                              pattern = ".caret.RDS",
-                              full.names = F
-) %>%
-  basename() %>%
-  str_remove(., ".caret.RDS")
-purrr::map2(
-  l.varimp,
-  names(l.varimp),
-  ~ .x %>%
-    as_tibble(rownames = "Feature") %>%
-    mutate(drug = .y)
-) %>%
-  purrr::reduce(., rbind) -> t.varimp
-write_tsv(t.varimp, file.path(p.out, outdir, "varImp.tsv"))
-
-
-## Estimate feature importance rf
-list.files(file.path(p.out, outdir),
-           pattern = ".caret.RDS",
-           full.names = T
-) %>%
-  future_map(
-    .,
-    ~ caret::varImp(readRDS(.x)$mo$mo.fit.rf)$importance
-  ) -> l.varimp
-names(l.varimp) <- list.files(file.path(p.out, outdir),
-                              pattern = ".caret.RDS",
-                              full.names = F
-) %>%
-  basename() %>%
-  str_remove(., ".caret.RDS")
-purrr::map2(
-  l.varimp,
-  names(l.varimp),
-  ~ .x %>%
-    as_tibble(rownames = "Feature") %>%
-    mutate(drug = .y)
-) %>%
-  purrr::reduce(., rbind) -> t.varimp
-write_tsv(t.varimp, file.path(p.out, outdir, "varImp_rf.tsv"))
-message(date(), "\nFinished!")
+message(date(), " => Finished!")

@@ -13,7 +13,6 @@ if (!require("tictoc")) install.packages("tictoc") else library(tictoc)
 if (!require("data.table")) install.packages("data.table") else library(data.table)
 if (!require("furrr")) install.packages("furrr") else library(furrr)
 if (!require("purrr")) install.packages("purrr") else library(purrr)
-#utility_functions <- file.path("F_auxiliary.R")
 source("src/F_auxiliary.R")
 ## read in data
 dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
@@ -21,20 +20,15 @@ dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # g
 
 # {MAIN}
 # df: samples on rows, features on columns, includes outcome variable 'y'
-train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
+train_caret.rf <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, folds = 5, reps = 1) {
   require(caret)
-  tgrid <- expand.grid(
-    .mtry = seq(from = 10, to = round(sqrt(ncol(df))), 10),
-    .splitrule = "variance",
-    .min.node.size = c(10, 20)
-  )
   set.seed(1234)
   model_caret <- train(y ~ .,
     data = df,
     method = "ranger",
     trControl = trainControl(
-      method = "repeatedcv", number = 5,
-      verboseIter = T, repeats = 2
+      method = "repeatedcv", number = folds,
+      verboseIter = T, repeats = reps
     ),
     tuneGrid = tgrid,
     preProcess = ppOpts,
@@ -44,22 +38,28 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale")) {
   )
   return(model_caret)
 }
-train_caret.glm <- function(df, ppOpts = c("center", "scale")) {
+
+train_caret.glm <- function(df, ppOpts = c("center", "scale"), folds = 5, reps = 1) {
   require(caret)
   set.seed(1234)
   model_caret <- train(y ~ .,
     data = df,
     method = "glmnet",
     trControl = trainControl(
-      method = "repeatedcv", number = 5,
-      verboseIter = T, repeats = 2
+      method = "repeatedcv", number = folds,
+      verboseIter = T, repeats = reps
     ),
     preProcess = ppOpts
   )
   return(model_caret)
 }
 
-run_caret <- function(dat, dr, drugName) {
+# dat: prepared data including omics + drug response
+# dr: drug response table
+# drugName: name of drug to be analysed
+# ppOpts: preprocessing options to be used during modeling  (e.g. scale/center/nzv/pca)
+# algorithm: "RF" for random forests or "GLM" for elastic nets using GLMNET 
+run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1) {
   set.seed(1234)
   selected <- intersect(dr[column_name == drugName]$sample_id, colnames(dat$mut))
   colData <- dr[column_name == drugName][match(selected, sample_id)]
@@ -76,79 +76,62 @@ run_caret <- function(dat, dr, drugName) {
   y.train <- colData[match(train_samples, sample_id)]$value
   y.test <- colData[match(test_samples, sample_id)]$value
 
-  # compute results for panel --------------------------------------------------
-  message(date(), " => processing panel")
-  panel.train <- data.frame(do.call(
-    cbind,
-    lapply(
+  message(date(), " => preparing datasets")
+  # prepare data for panel (mut + cnv)
+  panel.train <- data.frame(
+    do.call(cbind, lapply(
       dat.raw[c("mut.panel", "cnv.panel")],
       function(x) t(x[, train_samples])
-    )
-  ),
-  check.names = F
-  )
+    )),check.names = F)
   panel.train$y <- y.train
+  
   panel.test <- data.frame(do.call(cbind, lapply(
     dat.raw[c("mut.panel", "cnv.panel")],
     function(x) t(x[, test_samples])
-  )),
-  check.names = F
-  )
+  )), check.names = F)
   panel.test$y <- y.test
-  panel.fit.rf <- train_caret.rf(panel.train, c("center", "scale", "nzv"))
-  panel.fit.rf.pca <- train_caret.rf(panel.train, c("center", "scale", "nzv", "pca"))
-  panel.fit.glm <- train_caret.glm(panel.train, c("center", "scale", "nzv"))
-  panel.fit.glm.pca <- train_caret.glm(panel.train, c("center", "scale", "nzv", "pca"))
-
-
-  # compute results for mut+cnv+gex features (mo=multiomics) -------------------
-  message(date(), " => processing multiomics")
+  
+  # prepare data for mut+cnv+gex features (mo=multiomics) -------------------
   mo.train <- data.frame(do.call(cbind, lapply(
     dat.raw[c("mut.panel", "cnv.panel", "gex")],
     function(x) t(x[, train_samples])
-  )),
-  check.names = F
-  )
+  )), check.names = F)
   mo.train$y <- y.train
+  
   mo.test <- data.frame(do.call(cbind, lapply(
     dat.raw[c("mut.panel", "cnv.panel", "gex")],
     function(x) t(x[, test_samples])
-  )),
-  check.names = F
-  )
+  )), check.names = F)
   mo.test$y <- y.test
-  mo.fit.rf <- train_caret.rf(mo.train, c("center", "scale", "nzv"))
-  mo.fit.rf.pca <- train_caret.rf(mo.train, c("center", "scale", "nzv", "pca"))
-  mo.fit.glm <- train_caret.glm(mo.train, c("center", "scale", "nzv"))
-  mo.fit.glm.pca <- train_caret.glm(mo.train, c("center", "scale", "nzv", "pca"))
+  
+  # build models for both panel and multiomics
+  if(algorithm == 'RF') {
+    message(date(), " => modeling for panel features")
+    panel.fit <- train_caret.rf(df = panel.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
+    message(date(), " => modeling for multiomics features")
+    mo.fit <- train_caret.rf(df = mo.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
+  } else if(algorithm == 'GLM') {
+    message(date(), " => modeling for panel features")
+    panel.fit <- train_caret.glm(panel.train, ppOpts, folds, reps)
+    message(date(), " => modeling for multiomics features")
+    mo.fit <- train_caret.glm(mo.train, ppOpts, folds, reps)
+  }
 
-  # results
-  panel.stats.glm <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm, panel.test))
-  panel.stats.glm.pca <- evaluate_regression_model(panel.test$y, predict(panel.fit.glm.pca, panel.test))
-  panel.stats.rf <- evaluate_regression_model(panel.test$y, predict(panel.fit.rf, panel.test))
-  panel.stats.rf.pca <- evaluate_regression_model(panel.test$y, predict(panel.fit.rf.pca, panel.test))
-
-  mo.stats.glm <- evaluate_regression_model(mo.test$y, predict(mo.fit.glm, mo.test))
-  mo.stats.glm.pca <- evaluate_regression_model(mo.test$y, predict(mo.fit.glm.pca, mo.test))
-  mo.stats.rf <- evaluate_regression_model(mo.test$y, predict(mo.fit.rf, mo.test))
-  mo.stats.rf.pca <- evaluate_regression_model(mo.test$y, predict(mo.fit.rf.pca, mo.test))
-  # output
-  return(list(
-    panel = list(
-      "panel.fit" = panel.fit.glm, "panel.stats" = panel.stats.glm,
-      "panel.fit.pca" = panel.fit.glm.pca, "panel.stats.pca" = panel.stats.glm.pca,
-      "panel.test" = panel.test,
-      "panel.fit.rf" = panel.fit.rf, "panel.stats.rf" = panel.stats.rf,
-      "panel.fit.rf.pca" = panel.fit.rf.pca, "panel.stats.rf.pca" = panel.stats.rf.pca
-    ),
-    mo = list(
-      "mo.fit" = mo.fit.glm, "mo.stats" = mo.stats.glm,
-      "mo.fit.pca" = mo.fit.glm.pca, "mo.stats.pca" = mo.stats.glm.pca,
-      "mo.test" = mo.test,
-      "mo.fit.rf" = mo.fit.rf, "mo.stats.rf" = mo.stats.rf,
-      "mo.fit.rf.pca" = mo.fit.rf.pca, "mo.stats.rf.pca" = mo.stats.rf.pca
-    )
-  ))
+  # extract stats
+  panel.stats <- evaluate_regression_model(panel.test$y, stats::predict(panel.fit, panel.test))
+  mo.stats <- evaluate_regression_model(mo.test$y, stats::predict(mo.fit, mo.test))
+  
+  stats <- rbind(panel.stats, mo.stats)
+  stats$drugName <- drugName
+  stats$type <- c("panel", "multiomics")
+  stats$model <- algorithm
+  stats$ppOpts <- paste(ppOpts, collapse = '+')
+  stats$total_sample_count <- length(selected)
+  stats$training_sample_count <- length(train_samples)
+  stats$testing_sample_count <- length(test_samples)
+  
+  return(list('panel.fit' = panel.fit, 'mo.fit' = mo.fit, 
+              'stats' = stats))
 }
 
 tic(msg = "Modelling", quiet = FALSE, func.tic = my.msg.tic)
@@ -158,23 +141,43 @@ dr$column_name <- gsub("/", "-", dr$column_name)
 candidates <- names(table(dr[column_name != "untreated"]$column_name))
 candidates <- candidates[!(candidates %in% "")]
 
-candidates <- c('TPCA-1', 'VENETOCLAX', 'METHOTREXATE', 'I-BET-762', 'LEFLUNOMIDE')
+#candidates <- c('TPCA-1', 'VENETOCLAX', 'METHOTREXATE', 'I-BET-762', 'LEFLUNOMIDE')
 
 message(date()," => Modelling for ",length(candidates)," drugs")
-outdir <- dset # create a subfolder on the target path for each dataset
-# assign a unique identifier to the modelling run
+outdir <- dset 
+# create a subfolder on the target path for each dataset
 if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }  
 
+# Define hyperparameter optimisation tuning grids for different algorithms
+# random forests
+tgrid_rf <- expand.grid(
+   .mtry = seq(from = 10, to = 30, 10),
+   .splitrule = "variance",
+   .min.node.size = c(10, 20)
+)
+# using default tgrid for GLMNet
 
 cl <- parallel::makeForkCluster(30)
 doParallel::registerDoParallel(cl)
 foreach(drug = candidates) %dopar% {
   f <- file.path(p.out, outdir, paste0(drug, ".caret.RDS"))
+  
   if(!file.exists(f)) {
-    r <- run_caret(dat, dr, drugName = drug)
-    saveRDS(r, file = f)
+    # results using random forests
+    rf <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
+                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
+    rf_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
+                        algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
+    
+    glm <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
+                     algorithm = 'GLM', folds = 5, reps = 2)
+    glm_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
+                         algorithm = 'GLM', folds = 5, reps = 2)
+    
+    results <- list('rf' = rf, 'rf_pca' = rf_pca, 'glm' = glm, 'glm_pca' = glm_pca)
+    saveRDS(results, file = f)
   }
 }
 parallel::stopCluster(cl)

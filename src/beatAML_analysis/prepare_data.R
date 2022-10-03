@@ -100,11 +100,14 @@ mut <- matrix(as.numeric(mut), ncol = ncol(mut), dimnames = dimnames(mut))
 aac.dt <- data.table(t(aac), keep.rownames = T)
 colnames(aac.dt)[1] <- "name"
 dat <- list(
-  "mut" = mut, "gex_gs" = gex_gs,
-  "drugs" = melt.data.table(aac.dt, id.vars = "name")
+  "mut.panel" = mut, "gex" = gex_gs
 )
 
 message(date(), " => Saving prepared data")
-saveRDS(dat, file = "beatAML.prepared.RDS")
+saveRDS(dat, file = "data_beatAML.RDS")
+aac.mdt <- melt.data.table(aac.dt, id.vars = "name")
+colnames(aac.mdt) <- c('sample_id', 'column_name', 'value')
+write.table(aac.mdt, 
+            "drug_response.tsv", sep = '\t', quote = F, row.names = F)
 
 message(date(), " => Finished")

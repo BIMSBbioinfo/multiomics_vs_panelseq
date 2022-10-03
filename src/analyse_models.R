@@ -7,7 +7,7 @@ source("src/F_auxiliary.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 folder <- args[1] # folder containing caret.RDS files (modeling results)
-nCores <- args[2] # number of cores to use for parallelisation
+nCores <- as.numeric(args[2]) # number of cores to use for parallelisation
 # start the parallelization
 message(date()," => assembling model stats")
 
@@ -34,7 +34,7 @@ message(date()," => collating variable importance metrics")
 # go through each multiomics model and extract variable importance metrics
 # memory intensive job is to read the RDS files, so, we don't keep the contents in memory
 
-algorithms <- grep('pca', names(x), invert = T, value = T)
+algorithms <- c('rf', 'glm', 'svm')
 cl <- parallel::makeCluster(nCores)
 parallel::clusterExport(cl = cl, varlist = c('files', 'algorithms'))
 imp <- pbapply::pblapply(cl = cl, files, function(f) {
@@ -45,6 +45,7 @@ imp <- pbapply::pblapply(cl = cl, files, function(f) {
   # for each method (excluding ppOpts with PCA)
   # algorithm => run => type (multiomics)
   L <- sapply(simplify = F, algorithms, function(algorithm) {
+    # TODO: if multiple runs, take average per feature
     imp <- caret::varImp(x[[algorithm]][[1]][['mo.fit']])[['importance']]
     dt <- data.table('feature' = rownames(imp), 'val' = imp$Overall)
     colnames(dt)[2] <- drug

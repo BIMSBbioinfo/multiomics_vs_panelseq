@@ -82,29 +82,30 @@ prepareDataForModeling <- function(dat, dr, drugName, setSeed) {
   y.test <- colData[match(test_samples, sample_id)]$value
   
   message(date(), " => preparing datasets")
-  # prepare data for panel (mut + cnv)
+  # prepare data for panel (mut.panel and/or cnv.panel)
+  panel_layers <- grep('panel', names(dat.raw), value = T)
   panel.train <- data.frame(
     do.call(cbind, lapply(
-      dat.raw[c("mut.panel", "cnv.panel")],
+      dat.raw[panel_layers],
       function(x) t(x[, train_samples])
     )),check.names = F)
   panel.train$y <- y.train
   
   panel.test <- data.frame(do.call(cbind, lapply(
-    dat.raw[c("mut.panel", "cnv.panel")],
+    dat.raw[panel_layers],
     function(x) t(x[, test_samples])
   )), check.names = F)
   panel.test$y <- y.test
   
-  # prepare data for mut+cnv+gex features (mo=multiomics) -------------------
+  # prepare data for panel features + gex (mo=multiomics) -------------------
   mo.train <- data.frame(do.call(cbind, lapply(
-    dat.raw[c("mut.panel", "cnv.panel", "gex")],
+    dat.raw[c(panel_layers, "gex")],
     function(x) t(x[, train_samples])
   )), check.names = F)
   mo.train$y <- y.train
   
   mo.test <- data.frame(do.call(cbind, lapply(
-    dat.raw[c("mut.panel", "cnv.panel", "gex")],
+    dat.raw[c(panel_layers, "gex")],
     function(x) t(x[, test_samples])
   )), check.names = F)
   mo.test$y <- y.test
@@ -182,17 +183,18 @@ if (!dir.exists(file.path(p.out, outdir))) {
 
 # Define hyperparameter optimisation tuning grids for different algorithms
 # random forests
-tgrid_rf <- expand.grid(
-   .mtry = seq(from = 10, to = 30, 10),
-   .splitrule = "variance",
-   .min.node.size =  c(10, 20)
-)
-
+tgrid_rf <- NULL
+# tgrid_rf <- expand.grid(
+#    .mtry = seq(from = 10, to = 30, 10),
+#    .splitrule = "variance",
+#    .min.node.size =  c(10, 20)
+# )
 # using default tgrid for GLMNet
-tgrid_glm <- expand.grid(
-  .alpha = seq(0, 1, length = 10),
-  .lambda = seq(0.0001, 1, length = 20)
-)
+tgrid_glm <- NULL
+# tgrid_glm <- expand.grid(
+#   .alpha = seq(0, 1, length = 10),
+#   .lambda = seq(0.0001, 1, length = 20)
+# )
 
 #in sample train/test splits, set seed only if the modeling is not repeated with different train/test splits
 # generate seeds to be used in modeling runs

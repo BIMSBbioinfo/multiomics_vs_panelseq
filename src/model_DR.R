@@ -6,10 +6,16 @@ p.parent.dir <- getwd()
 dset <- args[1] ## Either CCLE or PDX
 p.data <- args[2] ## Path to a folder that contains "prepared" data
 p.out <- args[3] ## Path to a folder where the models and their summary statistics will be written
+repeatModeling <- as.numeric(args[4]) # Number of times the modeling procedure should be repeated with resampled train/test splits
+nCores <- as.numeric(args[5]) #number cores to use for parallelisation
+
 ## libraries & functions
-if (!require("foreach")) install.packages("foreach") else library(foreach)
-if (!require("data.table")) install.packages("data.table") else library(data.table)
-source("src/F_auxiliary.R")
+library(data.table)
+library(caret)
+library(pbapply)
+
+utility_script <- "src/F_auxiliary.R"
+source(utility_script)
 ## read in data
 dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data
@@ -58,10 +64,8 @@ train_caret.glm <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, fol
 # dr: drug response table
 # drugName: name of drug to be analysed
 # setSeed: TRUE/FALSE whether to set a seed. 
-prepareDataForModeling <- function(dat, dr, drugName, setSeed = TRUE) {
-  if(setSeed == TRUE) {
-    set.seed(1234)
-  }
+prepareDataForModeling <- function(dat, dr, drugName, setSeed) {
+  set.seed(setSeed)
   selected <- intersect(dr[column_name == drugName]$sample_id, colnames(dat$mut))
   colData <- dr[column_name == drugName][match(selected, sample_id)]
   
@@ -119,7 +123,9 @@ prepareDataForModeling <- function(dat, dr, drugName, setSeed = TRUE) {
 # tgrid: tuning grid to use for the corresponding algorithm
 # folds: number of folds for cross-validation
 # reps: number of repeates for repeating the cross-validation procedure
-run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1, setSeed = TRUE) {
+# setSeed: seed value to set while sampling train/test samples
+# runId: a numerical value that represents the current run
+run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1, runId, setSeed) {
   
   ds <- prepareDataForModeling(dat, dr, drugName, setSeed = setSeed)
   panel.train <- ds$panel.train
@@ -150,6 +156,8 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
   stats$type <- c("panel", "multiomics")
   stats$model <- algorithm
   stats$ppOpts <- paste(ppOpts, collapse = '+')
+  stats$run <- runId
+  stats$seed <- setSeed
   stats$total_sample_count <- ds$total_sample_count
   stats$training_sample_count <- ds$training_sample_count
   stats$testing_sample_count <- ds$testing_sample_count
@@ -177,7 +185,7 @@ if (!dir.exists(file.path(p.out, outdir))) {
 tgrid_rf <- expand.grid(
    .mtry = seq(from = 10, to = 30, 10),
    .splitrule = "variance",
-   .min.node.size = c(10, 20)
+   .min.node.size =  c(10, 20)
 )
 
 # using default tgrid for GLMNet
@@ -186,26 +194,48 @@ tgrid_glm <- expand.grid(
   .lambda = seq(0.0001, 1, length = 20)
 )
 
-cl <- parallel::makeForkCluster(30)
-doParallel::registerDoParallel(cl)
-foreach(drug = candidates) %dopar% {
+#in sample train/test splits, set seed only if the modeling is not repeated with different train/test splits
+# generate seeds to be used in modeling runs
+# the seed is always set to 1234 for the first run
+seeds <- c(1234, sample(1:2^10, repeatModeling-1))  
+cv_reps <- 1 #number of repetitions for cross-validation
+
+pbo = pbapply::pboptions(type="txt")
+
+cl <- parallel::makeCluster(nCores)
+parallel::clusterExport(cl, varlist = c('candidates', 'seeds', 'cv_reps', 
+                                        'dat', 'dr', 'tgrid_rf', 'tgrid_glm', 
+                                        'repeatModeling', 'p.out', 'outdir',
+                                        'run_caret', 'prepareDataForModeling', 
+                                        'train_caret.glm', 'train_caret.rf', 
+                                        'utility_script'))
+pbapply::pblapply(cl = cl, candidates, function(drug) { 
+  source(utility_script)
+  require(data.table)
   f <- file.path(p.out, outdir, paste0(drug, ".caret.RDS"))
   if(!file.exists(f)) {
     # results using random forests
-    rf <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
-    rf_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
-                        algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
+    rf <- lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"),
+                algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
+    rf_pca <-  lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
+                algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
     
-    glm <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                     algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = 2)
-    glm_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
-                         algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = 2)
-    
+    glm <- lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
+                algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
+    glm_pca <-  lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
+                algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
     results <- list('rf' = rf, 'rf_pca' = rf_pca, 'glm' = glm, 'glm_pca' = glm_pca)
     saveRDS(results, file = f)
   }
-}
+})
 parallel::stopCluster(cl)
 
 message(date(), " => Finished!")

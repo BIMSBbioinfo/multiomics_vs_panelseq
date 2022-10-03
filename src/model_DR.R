@@ -7,12 +7,8 @@ dset <- args[1] ## Either CCLE or PDX
 p.data <- args[2] ## Path to a folder that contains "prepared" data
 p.out <- args[3] ## Path to a folder where the models and their summary statistics will be written
 ## libraries & functions
-if (!require("tidyverse")) install.packages("tidyverse") else library(tidyverse)
 if (!require("foreach")) install.packages("foreach") else library(foreach)
-if (!require("tictoc")) install.packages("tictoc") else library(tictoc)
 if (!require("data.table")) install.packages("data.table") else library(data.table)
-if (!require("furrr")) install.packages("furrr") else library(furrr)
-if (!require("purrr")) install.packages("purrr") else library(purrr)
 source("src/F_auxiliary.R")
 ## read in data
 dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
@@ -39,7 +35,7 @@ train_caret.rf <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, fold
   return(model_caret)
 }
 
-train_caret.glm <- function(df, ppOpts = c("center", "scale"), folds = 5, reps = 1) {
+train_caret.glm <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, folds = 5, reps = 1) {
   require(caret)
   set.seed(1234)
   model_caret <- train(y ~ .,
@@ -49,7 +45,8 @@ train_caret.glm <- function(df, ppOpts = c("center", "scale"), folds = 5, reps =
       method = "repeatedcv", number = folds,
       verboseIter = T, repeats = reps
     ),
-    preProcess = ppOpts
+    preProcess = ppOpts,
+    tuneGrid = tgrid
   )
   return(model_caret)
 }
@@ -112,9 +109,9 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
     mo.fit <- train_caret.rf(df = mo.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
   } else if(algorithm == 'GLM') {
     message(date(), " => modeling for panel features")
-    panel.fit <- train_caret.glm(panel.train, ppOpts, folds, reps)
+    panel.fit <- train_caret.glm(df = panel.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
     message(date(), " => modeling for multiomics features")
-    mo.fit <- train_caret.glm(mo.train, ppOpts, folds, reps)
+    mo.fit <- train_caret.glm(df = mo.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
   }
 
   # extract stats
@@ -134,13 +131,11 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
               'stats' = stats))
 }
 
-tic(msg = "Modelling", quiet = FALSE, func.tic = my.msg.tic)
 # remove missing
 dr <- dr[!is.na(dr$value)][!is.na(sample_id)][!is.na(column_name)]
 dr$column_name <- gsub("/", "-", dr$column_name)
-candidates <- names(table(dr[column_name != "untreated"]$column_name))
-candidates <- candidates[!(candidates %in% "")]
-
+# pick drugs with treated on at least 100 samples 
+candidates <- dr[!column_name %in% c('untreated', ''),length(unique(sample_id)),by = column_name][V1 > 100]$column_name
 #candidates <- c('TPCA-1', 'VENETOCLAX', 'METHOTREXATE', 'I-BET-762', 'LEFLUNOMIDE')
 
 message(date()," => Modelling for ",length(candidates)," drugs")
@@ -157,24 +152,28 @@ tgrid_rf <- expand.grid(
    .splitrule = "variance",
    .min.node.size = c(10, 20)
 )
+
 # using default tgrid for GLMNet
+tgrid_glm <- expand.grid(
+  .alpha = seq(0, 1, length = 10),
+  .lambda = seq(0.0001, 1, length = 20)
+)
 
 cl <- parallel::makeForkCluster(30)
 doParallel::registerDoParallel(cl)
 foreach(drug = candidates) %dopar% {
   f <- file.path(p.out, outdir, paste0(drug, ".caret.RDS"))
-  
   if(!file.exists(f)) {
     # results using random forests
     rf <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
+                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 1)
     rf_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
                         algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
     
     glm <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                     algorithm = 'GLM', folds = 5, reps = 2)
+                     algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = 2)
     glm_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
-                         algorithm = 'GLM', folds = 5, reps = 2)
+                         algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = 2)
     
     results <- list('rf' = rf, 'rf_pca' = rf_pca, 'glm' = glm, 'glm_pca' = glm_pca)
     saveRDS(results, file = f)

@@ -51,16 +51,20 @@ train_caret.glm <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, fol
   return(model_caret)
 }
 
+# prepare panel/multiomics datasets to be modeled 
+# consolidate datasets, apply train/test splits 
+# dat: omics data list
 # dat: prepared data including omics + drug response
 # dr: drug response table
 # drugName: name of drug to be analysed
-# ppOpts: preprocessing options to be used during modeling  (e.g. scale/center/nzv/pca)
-# algorithm: "RF" for random forests or "GLM" for elastic nets using GLMNET 
-run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1) {
-  set.seed(1234)
+# setSeed: TRUE/FALSE whether to set a seed. 
+prepareDataForModeling <- function(dat, dr, drugName, setSeed = TRUE) {
+  if(setSeed == TRUE) {
+    set.seed(1234)
+  }
   selected <- intersect(dr[column_name == drugName]$sample_id, colnames(dat$mut))
   colData <- dr[column_name == drugName][match(selected, sample_id)]
-
+  
   # change feature names to avoid overlaps from different layers
   dat.raw <- sapply(simplify = F, names(dat), function(x) {
     m <- dat[[x]][, selected]
@@ -69,10 +73,10 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
   })
   train_samples <- sample(selected, round(length(selected) * 0.7))
   test_samples <- setdiff(selected, train_samples)
-
+  
   y.train <- colData[match(train_samples, sample_id)]$value
   y.test <- colData[match(test_samples, sample_id)]$value
-
+  
   message(date(), " => preparing datasets")
   # prepare data for panel (mut + cnv)
   panel.train <- data.frame(
@@ -100,6 +104,29 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
     function(x) t(x[, test_samples])
   )), check.names = F)
   mo.test$y <- y.test
+  return(list('panel.train' = panel.train, 'panel.test' = panel.test, 
+              'mo.train' = mo.train, 'mo.test' = mo.test, 
+              'total_sample_count' = length(selected), 
+              'training_sample_count' = length(train_samples), 
+              'testing_sample_count' = length(test_samples)))
+}
+ 
+# dat: prepared data including omics + drug response
+# dr: drug response table
+# drugName: name of drug to be analysed
+# ppOpts: preprocessing options to be used during modeling  (e.g. scale/center/nzv/pca)
+# algorithm: "RF" for random forests or "GLM" for elastic nets using GLMNET 
+# tgrid: tuning grid to use for the corresponding algorithm
+# folds: number of folds for cross-validation
+# reps: number of repeates for repeating the cross-validation procedure
+run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1, setSeed = TRUE) {
+  
+  ds <- prepareDataForModeling(dat, dr, drugName, setSeed = setSeed)
+  panel.train <- ds$panel.train
+  panel.test <- ds$panel.test
+  mo.train <- ds$mo.train
+  mo.test <- ds$mo.test
+  
   
   # build models for both panel and multiomics
   if(algorithm == 'RF') {
@@ -123,9 +150,9 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
   stats$type <- c("panel", "multiomics")
   stats$model <- algorithm
   stats$ppOpts <- paste(ppOpts, collapse = '+')
-  stats$total_sample_count <- length(selected)
-  stats$training_sample_count <- length(train_samples)
-  stats$testing_sample_count <- length(test_samples)
+  stats$total_sample_count <- ds$total_sample_count
+  stats$training_sample_count <- ds$training_sample_count
+  stats$testing_sample_count <- ds$testing_sample_count
   
   return(list('panel.fit' = panel.fit, 'mo.fit' = mo.fit, 
               'stats' = stats))
@@ -166,7 +193,7 @@ foreach(drug = candidates) %dopar% {
   if(!file.exists(f)) {
     # results using random forests
     rf <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 1)
+                    algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
     rf_pca <- run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
                         algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = 2)
     

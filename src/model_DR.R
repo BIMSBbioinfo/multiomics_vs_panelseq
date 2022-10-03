@@ -20,39 +20,20 @@ source(utility_script)
 dat <- readRDS(file.path(p.data, "prepared", paste0("data_", dset, ".RDS")))
 dr <- data.table::fread(file.path(p.data, "Raw", dset, "drug_response.tsv")) # get drug response data
 
-# {MAIN}
-# df: samples on rows, features on columns, includes outcome variable 'y'
-train_caret.rf <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, folds = 5, reps = 1) {
-  require(caret)
-  set.seed(1234)
-  model_caret <- train(y ~ .,
-    data = df,
-    method = "ranger",
-    trControl = trainControl(
-      method = "repeatedcv", number = folds,
-      verboseIter = T, repeats = reps
-    ),
-    tuneGrid = tgrid,
-    preProcess = ppOpts,
-    num.trees = 500,
-    importance = "permutation",
-    num.threads = 2
-  )
-  return(model_caret)
-}
 
-train_caret.glm <- function(df, ppOpts = c("center", "scale"), tgrid = NULL, folds = 5, reps = 1) {
+train_caret <- function(df, algorithm, ppOpts = c("center", "scale"), tgrid = NULL, folds = 5, reps = 1, ...) {
   require(caret)
   set.seed(1234)
   model_caret <- train(y ~ .,
-    data = df,
-    method = "glmnet",
-    trControl = trainControl(
-      method = "repeatedcv", number = folds,
-      verboseIter = T, repeats = reps
-    ),
-    preProcess = ppOpts,
-    tuneGrid = tgrid
+                       data = df,
+                       method = algorithm,
+                       trControl = trainControl(
+                         method = "repeatedcv", number = folds,
+                         verboseIter = T, repeats = reps
+                       ), 
+                       preProcess = ppOpts,
+                       tuneGrid = tgrid,
+                       ...
   )
   return(model_caret)
 }
@@ -126,7 +107,8 @@ prepareDataForModeling <- function(dat, dr, drugName, setSeed) {
 # reps: number of repeates for repeating the cross-validation procedure
 # setSeed: seed value to set while sampling train/test samples
 # runId: a numerical value that represents the current run
-run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1, runId, setSeed) {
+# ... : additional options to pass to train_caret -> train
+run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds = 5, reps = 1, runId, setSeed, ...) {
   
   ds <- prepareDataForModeling(dat, dr, drugName, setSeed = setSeed)
   panel.train <- ds$panel.train
@@ -134,20 +116,13 @@ run_caret <- function(dat, dr, drugName, ppOpts, algorithm, tgrid = NULL, folds 
   mo.train <- ds$mo.train
   mo.test <- ds$mo.test
   
-  
   # build models for both panel and multiomics
-  if(algorithm == 'RF') {
-    message(date(), " => modeling for panel features")
-    panel.fit <- train_caret.rf(df = panel.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
-    message(date(), " => modeling for multiomics features")
-    mo.fit <- train_caret.rf(df = mo.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
-  } else if(algorithm == 'GLM') {
-    message(date(), " => modeling for panel features")
-    panel.fit <- train_caret.glm(df = panel.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
-    message(date(), " => modeling for multiomics features")
-    mo.fit <- train_caret.glm(df = mo.train, ppOpts = ppOpts, tgrid = tgrid, folds = folds, reps = reps)
-  }
-
+  message(date(), " => modeling for panel features")
+  panel.fit <- train_caret(df = panel.train, algorithm = algorithm, ppOpts = ppOpts, 
+                           tgrid = tgrid, folds = folds, reps = reps, ...)
+  message(date(), " => modeling for multiomics features")
+  mo.fit <- train_caret(df = mo.train, algorithm = algorithm, ppOpts = ppOpts, tgrid = tgrid, 
+                           folds = folds, reps = reps, ...)
   # extract stats
   panel.stats <- evaluate_regression_model(panel.test$y, stats::predict(panel.fit, panel.test))
   mo.stats <- evaluate_regression_model(mo.test$y, stats::predict(mo.fit, mo.test))
@@ -181,21 +156,6 @@ if (!dir.exists(file.path(p.out, outdir))) {
   dir.create(file.path(p.out, outdir))
 }  
 
-# Define hyperparameter optimisation tuning grids for different algorithms
-# random forests
-tgrid_rf <- NULL
-# tgrid_rf <- expand.grid(
-#    .mtry = seq(from = 10, to = 30, 10),
-#    .splitrule = "variance",
-#    .min.node.size =  c(10, 20)
-# )
-# using default tgrid for GLMNet
-tgrid_glm <- NULL
-# tgrid_glm <- expand.grid(
-#   .alpha = seq(0, 1, length = 10),
-#   .lambda = seq(0.0001, 1, length = 20)
-# )
-
 #in sample train/test splits, set seed only if the modeling is not repeated with different train/test splits
 # generate seeds to be used in modeling runs
 # the seed is always set to 1234 for the first run
@@ -206,11 +166,10 @@ pbo = pbapply::pboptions(type="txt")
 
 cl <- parallel::makeCluster(nCores)
 parallel::clusterExport(cl, varlist = c('candidates', 'seeds', 'cv_reps', 
-                                        'dat', 'dr', 'tgrid_rf', 'tgrid_glm', 
-                                        'repeatModeling', 'p.out', 'outdir',
+                                        'dat', 'dr', 'repeatModeling', 
+                                        'p.out', 'outdir',
                                         'run_caret', 'prepareDataForModeling', 
-                                        'train_caret.glm', 'train_caret.rf', 
-                                        'utility_script'))
+                                        'train_caret', 'utility_script'))
 pbapply::pblapply(cl = cl, candidates, function(drug) { 
   source(utility_script)
   require(data.table)
@@ -219,22 +178,34 @@ pbapply::pblapply(cl = cl, candidates, function(drug) {
     # results using random forests
     rf <- lapply(1:repeatModeling, function(i) {
       run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"),
-                algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+                algorithm = 'ranger', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, 
+                setSeed = seeds[i], num.threads = 2, importance = 'permutation')
     })
     rf_pca <-  lapply(1:repeatModeling, function(i) {
       run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
-                algorithm = 'RF', tgrid = tgrid_rf, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+                algorithm = 'ranger', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, 
+                setSeed = seeds[i], num.threads = 2, importance = 'permutation')
     })
-    
     glm <- lapply(1:repeatModeling, function(i) {
       run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
-                algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+                algorithm = 'glmnet', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
     })
     glm_pca <-  lapply(1:repeatModeling, function(i) {
       run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
-                algorithm = 'GLM', tgrid = tgrid_glm, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+                algorithm = 'glmnet', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
     })
-    results <- list('rf' = rf, 'rf_pca' = rf_pca, 'glm' = glm, 'glm_pca' = glm_pca)
+    
+    svm <- lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv"), 
+                algorithm = 'svmRadial', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
+    svm_pca <- lapply(1:repeatModeling, function(i) {
+      run_caret(dat = dat, dr = dr, drugName = drug, ppOpts = c("center", "scale", "nzv", "pca"), 
+                algorithm = 'svmRadial', tgrid = NULL, folds = 5, reps = cv_reps, runId = i, setSeed = seeds[i])
+    })
+    
+    results <- list('rf' = rf, 'rf_pca' = rf_pca, 'glm' = glm, 'glm_pca' = glm_pca, 
+                    'svm' = svm, 'svm_pca' = svm_pca)
     saveRDS(results, file = f)
   }
 })

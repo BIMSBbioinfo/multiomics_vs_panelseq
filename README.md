@@ -2,71 +2,43 @@
 
 Supporting repository for the manuscript of the same name. Here, one can find scripts and instructions to recreate the work partly or as a whole.
 
-## Analysing CCLE and PDX datasets 
 
-###  Downloading the data
+# Downloading the data
 ```get_data.sh``` script is here to access the data used in the work. Three download options are provided: ```raw, proc, all```. Example usage: 
  ```bash
  git clone https://github.com/BIMSBbioinfo/multiomics_vs_panelseq.git
  cd multiomics_vs_panelseq
  bash get_data.sh -s <raw|proc|all> -o <out_path>
  ```
-### Preparing the data, building models and assessing predictions
+
+# Building drug response prediction models
+
 After the selected data were downloaded, one has multiple paths to follow. 
 To generate models from the processed data the code section below would be sufficient:
+
  ```R
- Rscript src/model_DR.R "CCLE" <path_to_data_dir> <path_to_write_models>
- Rscript src/model_DR.R "PDX" <path_to_data_dir> <path_to_write_models>
+ usage:
+ Rscript src/model_DR.R <dataset> <path_to_data_dir> <path_to_write_models> <number of runs> <number of cores>
+ example (building models using CCLE or beatAML datasets, running 1 modeling run per drug using 10 cores:
+ Rscript src/model_DR.R CCLE ./data ./results 1 10
  ```
-Alternatively, one can directly recreate the figures running this section:
+
+ A modeling run for each drug can be repeated multiple times (we do this for PDX samples):
  ```R
- Rscript src/plot_figures.R <path_to_data_dir> <path_to_write_figures>
+ Rscript src/model_DR.R PDX ./data ./results 20 10
  ```
 
+Once the models are built, performance metrics and variable importance metrics 
+can be extracted and saved with the following
+ ```R
+ Rscript ./src/analyse_models.R ./results 20 #using 10 cores to process results
+ ```
 
-## Analysing BeatAML dataset
+# Producing manuscript figures and tables 
 
-Below is a description of how to download, process and analyse BeatAML dataset from the [orcestra.ca database](https://www.orcestra.ca/pset/canonical).
-The outputs of the scripts can be found under ./data or ./results folders. 
+Finally, figures and tables can be collated:
+ ```R
+ Rscript ./src/collate_figures_tables.R ./results
+ ```
 
-	- data/beatAML.prepared.RDS (output from step 2)
-	- results/beatAML.stats.tsv and results/beatAML.plot.pdf (output from step 3)
-
-1. First create a working folder:
-
-```
- mkdir BeatAML 
- cd BeatAML
-```
-
-2. Preparing the data (assuming the current folder is BeatAML)
-  
-This will import BeatAML_2018 dataset from [orcestra.ca database](https://www.orcestra.ca/pset/canonical) and process the 
-gene expression, mutation, and drug sensitivity data to make it ready for downstream analysis.  
-  
-  ```
-  Rscript ../src/beatAML_analysis/prepare_data.R ../data 
-  ```
-The prepared dataset can be found in ./data/beatAML.prepared.RDS. 
-
-3. Modeling drug-sensitivity using genomic/transcriptomic features 
-
-This will build two sets of models for every drug that was treated against at least 100 samples. 
-One model using only mutation features for genes in the onkokb panel, and a second model 
-using gene-set scores derived from rna-seq dataset along on top of the mutation features from the first model. 
-A train/test split will be created for each drug (70/30); and a repated-cross-validation procedure will 
-be followed on the training data. The performance of the models will be tested on the test split and 
-statistics will be generated for each drug. 
-
-The generated stats are saved in beatAML.stats.tsv, and a summary figure is created in beatAML.plot.pdf. 
-
-  ```
-  Rscript ../src/beatAML_analysis/analysis.R ../data/beatAML.prepared.RDS
-  ```
-
-The summary figure can also be separately plotted using the plot_summary.R script. 
-
-  ```
-   Rscript ../src/beatAML_analysis/plot_summar.R ../results/beatAML.stats.tsv
-  ```
 

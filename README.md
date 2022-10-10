@@ -38,7 +38,7 @@ can be extracted and saved with the following
 
 Finally, figures and tables can be collated:
  ```R
- Rscript ./src/collate_figures_tables.R ./results
+ Rscript ./src/collate_figures_tables.R ./results <get_data.sh out_path>
  ```
 
 

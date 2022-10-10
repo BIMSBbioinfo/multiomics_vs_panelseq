@@ -4,11 +4,11 @@ Supporting repository for the manuscript of the same name. Here, one can find sc
 
 
 # Downloading the data
-```get_data.sh``` script is here to access the data used in the work. Three download options are provided: ```raw, proc, all```. Example usage: 
+```get_data.sh``` script is here to access the data used in the work. Example usage: 
  ```bash
  git clone https://github.com/BIMSBbioinfo/multiomics_vs_panelseq.git
  cd multiomics_vs_panelseq
- bash get_data.sh -s <raw|proc|all> -o <out_path>
+ bash get_data.sh -o <out_path>
  ```
 
 # Building drug response prediction models

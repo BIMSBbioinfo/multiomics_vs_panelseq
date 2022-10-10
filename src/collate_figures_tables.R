@@ -8,16 +8,16 @@ library(openxlsx)
 library(ggplot2)
 library(ggpubr)
 library(ggrepel)
-library(ggbeeswarm)
+library(ggridges)
 library(patchwork)
 library(data.table)
 library(janitor)
 library(magrittr)
 library(stringr)
 library(dplyr)
+library(tidyr)
 
 message(date(), " => collecting results files")
-ggplot2::theme_set(ggpubr::theme_pubclean())
 
 # collate all performance metrics into one table
 stats <- do.call(rbind, sapply(simplify = F, c('CCLE', 'PDX', 'beatAML'), function(x) {
@@ -161,29 +161,50 @@ dt.dcl <- dt.dcl[, .(Rsquare, drugName, type)]
 dt.dcl <- dcast(dt.dcl, drugName ~ type, value.var = "Rsquare")
 dt.dcl[, impr := multiomics - panel]
 dt.dcl <- dr.cls[dt.dcl, on = "drugName"]
-# count drug classes in top & bottom 10%
-v.brds <- quantile(dt.dcl$impr, c(0.2, 0.8))
-dt.dcl[, dummy := ifelse(impr < v.brds[1], "bottom 20%", ifelse(impr >= v.brds[2], "top 20%", NA))]
-dt.dcl[!is.na(dummy)] %>% tabyl(MOA, dummy) -> t.gg
-t.gg[abs(t.gg$`bottom 20%` - t.gg$`top 20%`) >= 3, ] -> t.gg
-# assemble a plot
-p.text <- rbind(
-  data.frame(x = 0.2, text = paste0(arrange(t.gg, `bottom 20%`)$MOA[1:3], collapse = "\n"), impr = "+"),
-  data.frame(x = -0.2, text = paste0(arrange(t.gg, `top 20%`)$MOA[1:3], collapse = "\n"), impr = "-")
-)
-p <- ggplot(data = dt.dcl, aes(x = impr, y = "")) + 
-  geom_quasirandom(aes(fill = impr), size = 2, shape = 21, groupOnX = F) +
-  geom_vline(xintercept = 0) +
-  geom_text(data = p.text, aes(x = x, label = text, color = impr), nudge_y = 0.3) +
-  scale_color_manual(values = c("red", "black")) +
+# select 8 drug classes that are the most represented in the current dataset
+dt.dcl %>% 
+  tabyl(MOA) %>% 
+  drop_na() %>%
+  arrange(desc(n)) %>% 
+  filter(n > 5) %>% 
+  pull(MOA) -> v.tmp
+# filter the plotting table to include only those
+dt.dcl %>% 
+  filter(MOA %in% v.tmp) -> t.tmp
+# order drug classes based on average improvement in MOs
+moa.ord <- t.tmp %>% 
+  group_by(MOA) %>% 
+  summarise(med_impr = median(impr), 
+            avg_impr = mean(impr), .groups = "drop") %>% 
+  arrange(avg_impr) %>% 
+  pull(MOA)
+
+# assemblt the plot
+p <- t.tmp %>% 
+  mutate(MOA = factor(MOA, levels = c(moa.ord))) %>% 
+  ggplot(data = ., aes(x = impr, y = MOA, fill = stat(x))) + 
+  geom_density_ridges_gradient(scale = 2, 
+                               rel_min_height = 0.01, 
+                               gradient_lwd = 1,
+                               bandwidth = 0.03) + 
   scale_fill_gradient2(low = "black", mid = "gray", high = "red") +
-  #scale_color_gradient2(low = "black", mid = "gray", high = "red") +
-  labs(x = "Multiomics improvement (CCLE)", y = "") + 
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
-        legend.position = "none")
+  geom_vline(xintercept = 0) + 
+  geom_vline(xintercept = 0.053, 
+             linetype = "dashed") + 
+  scale_x_continuous(expand = c(0.07, -0.01)) +
+  labs(x = "Multiomics improvement (CCLE)", 
+       y = "Drug mechanism of action") +
+  guides(fill = guide_colourbar(barwidth = 26, 
+                                barheight = 1, 
+                                direction = "horizontal", 
+                                title = "", label = F, ticks = T)) + 
+  theme(legend.position = "bottom", 
+  axis.title.x = element_text(vjust = -1.2))
 
 ggsave(filename = 'figure_2.pdf', plot = p, 
        width = 9, height = 4.96)
+
+
 
 # supplementary figure 2: 
 # drug classes by improvement (glmnet and svm)
@@ -194,36 +215,50 @@ lapply(c("glmnet", "svmRadial"),
         dt.dcl <- dcast(dt.dcl, drugName ~ type, value.var = "Rsquare")
         dt.dcl[, impr := multiomics - panel]
         dt.dcl <- dr.cls[dt.dcl, on = "drugName"]
-        
-        # count drug classes in top & bottom 10%
-        v.brds <- quantile(dt.dcl$impr, c(0.2, 0.8))
-        #
-        dt.dcl[, dummy := ifelse(impr < v.brds[1], "bottom 20%", ifelse(impr >= v.brds[2], "top 20%", NA))]
-        #
-        dt.dcl[!is.na(dummy)] %>% tabyl(MOA, dummy) -> t.gg
-        t.gg[abs(t.gg$`bottom 20%` - t.gg$`top 20%`) >= 3, ] -> t.gg
-        
-        p.text <- rbind(
-          tibble(x = 0.2, text = paste0(arrange(t.gg, `bottom 20%`)$MOA[1:3], collapse = "\n"), impr = "+"),
-          tibble(x = -0.15, text = paste0(arrange(t.gg, `top 20%`)$MOA[1:3], collapse = "\n"), impr = "-")
-        )
-        ggplot(data = dt.dcl, aes(x = impr, y = "")) + 
-          geom_quasirandom(aes(fill = impr), size = 2, shape = 21, groupOnX = F) +
-          geom_vline(xintercept = 0) +
-          geom_text(data = p.text, aes(x = x, label = text, color = impr), nudge_y = 0.3) +
-          scale_color_manual(values = c("red", "black")) +
+        # select 8 drug classes that are the most represented in the current dataset
+        dt.dcl %>% 
+          tabyl(MOA) %>% 
+          drop_na() %>%
+          arrange(desc(n)) %>% 
+          filter(n > 5) %>% 
+          pull(MOA) -> v.tmp
+        # filter the plotting table to include only those
+        dt.dcl %>% 
+          filter(MOA %in% v.tmp) -> t.tmp
+        # order drug classes based on average improvement in MOs
+        moa.ord <- t.tmp %>% 
+          group_by(MOA) %>% 
+          summarise(med_impr = median(impr), 
+                    avg_impr = mean(impr), .groups = "drop") %>% 
+          arrange(avg_impr) %>% 
+          pull(MOA)
+        # assemblt the plot
+        t.tmp %>% 
+          mutate(MOA = factor(MOA, levels = c(moa.ord))) %>% 
+          ggplot(data = ., aes(x = impr, y = MOA, fill = stat(x))) + 
+          geom_density_ridges_gradient(scale = 2, 
+                                      rel_min_height = 0.01, 
+                                      gradient_lwd = 1,
+                                      bandwidth = 0.03) + 
           scale_fill_gradient2(low = "black", mid = "gray", high = "red") +
-          #scale_color_gradient2(low = "black", mid = "gray", high = "red") +
-          labs(x = paste0("Multiomics improvement (CCLE) ", model_name), y = "") + 
-          coord_cartesian(xlim = c(-0.2, 0.3)) +
-          theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
-                legend.position = "none")
+          geom_vline(xintercept = 0) + 
+          geom_vline(xintercept = 0.053, 
+                    linetype = "dashed") + 
+          scale_x_continuous(expand = c(0.07, -0.01)) +
+          labs(x = paste0("Multiomics improvement (CCLE,", model_name, ")"), 
+               y = "Drug mechanism of action") +
+          guides(fill = guide_colourbar(barwidth = 26, 
+                                        barheight = 1, 
+                                        direction = "horizontal", 
+                                        title = "", label = F, ticks = T)) + 
+          theme(legend.position = "bottom", 
+                axis.title.x = element_text(vjust = -1.2))
        }) -> l.p
+
 
 # Most important features for venotoclax
 arrange(IMP$CCLE$rf[IMP$CCLE$rf$VENETOCLAX > 0, c("feature", "VENETOCLAX")], desc(VENETOCLAX)) -> t.vnt.sort
 t.vnt.sort <- t.vnt.sort[t.vnt.sort$VENETOCLAX >= quantile(t.vnt.sort$VENETOCLAX, 0.985), ]
-
 t.vnt.sort$feature <- str_remove(t.vnt.sort$feature, ".panel")
 str_sub(t.vnt.sort$feature, -4, -4) <- "-"
 t.vnt.sort$colvar <- str_split_fixed(t.vnt.sort$feature, "-", 2)[, 2]
@@ -261,11 +296,11 @@ lapply(unique(stats$dataset), function(dataset) {
     writeData(OUT, sheet = sname, x = stats[dataset == dataset][model == model])
   })
 })
-saveWorkbook(OUT, "SupplementaryTable1.xlsx")
+saveWorkbook(OUT, "SupplementaryTable1.xlsx", overwrite = T)
 
 # supp. table 2
 # variable importance metrics
-OUT <- createWorkbook()
+OUT <- createWorkbook( )
 lapply(names(IMP), function(dataset) {
   lapply(names(IMP[[dataset]]), function(model) {
     sname<-paste(dataset, "feature_importance", model, sep = "_")
@@ -273,7 +308,26 @@ lapply(names(IMP), function(dataset) {
     writeData(OUT, sheet = sname, x = IMP[[dataset]][[model]])
   })
 })
-saveWorkbook(OUT, "SupplementaryTable2.xlsx")
+saveWorkbook(OUT, "SupplementaryTable2.xlsx", overwrite = T)
+
+# supp. table 3
+# improvement across drug classes, per dataset, per model
+OUT <- createWorkbook()
+lapply(c("CCLE", "PDX", "beatAML"), function(Dataset) {
+  lapply(c("ranger", "glmnet", "svmRadial"), function(Model) {
+    dt.dcl <- stats[dataset == Dataset & ppOpts == "center+scale+nzv" & model == Model]
+    dt.dcl <- dt.dcl[, .(Rsquare, drugName, type)]
+    dt.dcl <- dcast(dt.dcl, drugName ~ type, value.var = "Rsquare")
+    dt.dcl[, impr := multiomics - panel]
+    dt.dcl <- dr.cls[dt.dcl, on = "drugName"]
+    dt.dcl <- drop_na(dt.dcl)
+    sname <- paste(Dataset, "drug_improv", Model, sep = "_")
+    addWorksheet(OUT, sname)
+    writeData(OUT, sheet = sname, x = dt.dcl)
+  })
+})
+saveWorkbook(OUT, "SupplementaryTable3.xlsx", overwrite = T)
+
 
 message(date(), " => Finished collating figures and tables")
 

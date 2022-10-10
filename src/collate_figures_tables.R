@@ -136,7 +136,7 @@ BBBCC
 "
 p <- p1 + p2 + p3 + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
 
-ggsave(filename = 'figure1.pdf', plot = p, width = 13.76, height = 7.44)
+ggsave(filename = file.path(folder, 'figure1.pdf'), plot = p, width = 13.76, height = 7.44)
 
 # supp. figure 1: => we say why we chose RF for main figure
 # comparison of methods (RF/glmnet/svm) and ppopts (with/without pca)
@@ -150,7 +150,7 @@ plots <- lapply(c('CCLE', 'beatAML'), function(ds) {
 })
 
 p <- plots[[1]] + plots[[2]]
-ggsave(filename = 'figure_S1.pdf', plot = p, 
+ggsave(filename = file.path(folder, 'figure_S1.pdf'), plot = p, 
        width = 14.7, height = 7.44)
 
 # main figure 2: 
@@ -201,7 +201,7 @@ p <- t.tmp %>%
   theme(legend.position = "bottom", 
   axis.title.x = element_text(vjust = -1.2))
 
-ggsave(filename = 'figure_2.pdf', plot = p, 
+ggsave(filename = file.path(folder, 'figure_2.pdf'), plot = p, 
        width = 9, height = 4.96)
 
 
@@ -276,7 +276,7 @@ layout <-
 "AAAACC
  BBBBCC"
 p <- l.p[[1]] + l.p[[2]] + p.ven + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
-ggsave(filename = 'figure_S2.pdf', plot = p, 
+ggsave(filename = file.path(folder, 'figure_S2.pdf'), plot = p, 
        width = 9.8, height = 4.96)
 
 
@@ -296,7 +296,7 @@ lapply(unique(stats$dataset), function(dataset) {
     writeData(OUT, sheet = sname, x = stats[dataset == dataset][model == model])
   })
 })
-saveWorkbook(OUT, "SupplementaryTable1.xlsx", overwrite = T)
+saveWorkbook(OUT, file.path(folder, "SupplementaryTable1.xlsx"), overwrite = T)
 
 # supp. table 2
 # variable importance metrics
@@ -308,7 +308,7 @@ lapply(names(IMP), function(dataset) {
     writeData(OUT, sheet = sname, x = IMP[[dataset]][[model]])
   })
 })
-saveWorkbook(OUT, "SupplementaryTable2.xlsx", overwrite = T)
+saveWorkbook(OUT, file.path(folder, "SupplementaryTable2.xlsx"), overwrite = T)
 
 # supp. table 3
 # improvement across drug classes, per dataset, per model
@@ -326,7 +326,7 @@ lapply(c("CCLE", "PDX", "beatAML"), function(Dataset) {
     writeData(OUT, sheet = sname, x = dt.dcl)
   })
 })
-saveWorkbook(OUT, "SupplementaryTable3.xlsx", overwrite = T)
+saveWorkbook(OUT, file.path(folder, "SupplementaryTable3.xlsx"), overwrite = T)
 
 
 message(date(), " => Finished collating figures and tables")

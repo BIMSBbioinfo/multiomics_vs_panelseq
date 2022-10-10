@@ -43,7 +43,7 @@ colnames(dr.cls) <- c("drugName", "MOA")
 
 
 message(date(), " => making plots")
-
+ggplot2::theme_set(ggpubr::theme_pubclean())
 # make a scatter plot of comparing panel vs multiomics, along with a boxplot
 # that demonstrates comparison stats
 # main figure 1: 

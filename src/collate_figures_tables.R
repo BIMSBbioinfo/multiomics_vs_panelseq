@@ -69,7 +69,7 @@ p1 <- ggscatter(dtc, x = 'panel', y = 'multiomics') +
   coord_fixed() + 
   geom_text_repel(data = top_drugs, aes(label = drugName), size = 3) + 
   scale_color_gradient2(low = "black", mid = "gray", high = "red") +
-  labs(color = "Improvement", x = "panel", y = "multiomics") +
+  labs(color = "Improvement (Rsquared)", x = "Panel", y = "Multiomics") +
   facet_wrap(~ dataset, nrow = 1) +
   theme(legend.position = 'right')
 

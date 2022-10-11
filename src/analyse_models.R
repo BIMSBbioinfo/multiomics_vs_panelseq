@@ -1,7 +1,7 @@
 # analyse models built for drug response
 ## libraries & functions
 if (!require("data.table")) install.packages("data.table") else library(data.table)
-library(pbapply)
+if (!require("pbapply")) install.packages("pbapply") else library(pbapply)
 source("src/F_auxiliary.R")
 
 args <- commandArgs(trailingOnly = TRUE)

@@ -4,6 +4,11 @@ args <- commandArgs(trailingOnly = T)
 folder <- args[1] #path to folder which contains result folders for CCLE/PDX/beatAML
 folder.data <- args[2] #path to a folder that contains all data (including auxiliary, prepared, etc.)
 
+# Check for missing packages, install if needed
+list_of_pkgs <- c("openxlsx", "ggplot2", "ggpubr","ggrepel","ggridges","patchwork",
+                  "data.table","janitor","magrittr","stringr","dplyr","tidyr")
+install.packages(list_of_pkgs[! list_of_pkgs %in% rownames(installed.packages())])
+
 library(openxlsx)
 library(ggplot2)
 library(ggpubr)

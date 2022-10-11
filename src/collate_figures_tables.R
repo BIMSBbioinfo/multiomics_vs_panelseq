@@ -156,6 +156,7 @@ plots <- lapply(c('CCLE', 'beatAML'), function(ds) {
             add = 'jitter', color = 'type') +
     facet_grid(ppOpts ~ model) + stat_compare_means() + 
     scale_color_brewer(type = 'qual', palette = 6) +
+    theme_bw()+
     theme(legend.position = 'none', axis.title.x = element_blank()) + 
     labs(title = ds)
 })

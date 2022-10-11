@@ -198,12 +198,12 @@ p4 <- t.tmp %>%
                                rel_min_height = 0.01, 
                                gradient_lwd = 1,
                                bandwidth = 0.03) + 
-  scale_fill_gradient2(low = "black", mid = "gray", high = "blue") +
+  scale_fill_gradient2(low = "black", mid = "gray", high = "red") +
   geom_vline(xintercept = 0) + 
   geom_vline(xintercept = 0.053, 
              linetype = "dashed") + 
   scale_x_continuous(expand = c(0.07, -0.01)) +
-  labs(x = "Average Multiomics Improvement (CCLE)", 
+  labs(x = "Mean Improvement (CCLE,Rsquared)", 
        y = "Drug mechanism of action") +
   guides(fill = guide_colourbar(barwidth = 26, 
                                 barheight = 1, 

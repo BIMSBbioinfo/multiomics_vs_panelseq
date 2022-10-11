@@ -311,14 +311,15 @@ lapply(names(IMP), function(dataset) {
 saveWorkbook(OUT, file.path(folder, "SupplementaryTable2.xlsx"), overwrite = T)
 
 # supp. table 3
-# improvement across drug classes, per dataset, per model
+# improvement across drug classes, per dataset, per model; PDX is omitted because only two drugs were annotated
 OUT <- createWorkbook()
-lapply(c("CCLE", "PDX", "beatAML"), function(Dataset) {
+lapply(c("CCLE", "beatAML"), function(Dataset) {
   lapply(c("ranger", "glmnet", "svmRadial"), function(Model) {
     dt.dcl <- stats[dataset == Dataset & ppOpts == "center+scale+nzv" & model == Model]
     dt.dcl <- dt.dcl[, .(Rsquare, drugName, type)]
     dt.dcl <- dcast(dt.dcl, drugName ~ type, value.var = "Rsquare")
     dt.dcl[, impr := multiomics - panel]
+    dt.dcl[, drugName := str_to_upper(drugName)]
     dt.dcl <- dr.cls[dt.dcl, on = "drugName"]
     dt.dcl <- drop_na(dt.dcl)
     sname <- paste(Dataset, "drug_improv", Model, sep = "_")

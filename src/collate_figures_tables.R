@@ -268,7 +268,7 @@ lapply(c("glmnet", "svmRadial"),
            geom_vline(xintercept = 0.053, 
                       linetype = "dashed") + 
            scale_x_continuous(expand = c(0.07, -0.01)) +
-           labs(x = paste0("Multiomics improvement (CCLE,", model_name, ")"), 
+           labs(x = paste0("Multiomics improvement (CCLE,", model_name, ",Rsquared)"), 
                 y = "Drug mechanism of action") +
            guides(fill = guide_colourbar(barwidth = 26, 
                                          barheight = 1, 

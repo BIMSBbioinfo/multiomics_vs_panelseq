@@ -20,6 +20,7 @@ To generate models from the processed data the code section below would be suffi
  usage:
  Rscript src/model_DR.R <dataset> <path_to_data_dir> <path_to_write_models> <number of runs> <number of cores>
  example (building models using CCLE or beatAML datasets, running 1 modeling run per drug using 10 cores:
+ bash get_data.sh -o ./
  Rscript src/model_DR.R CCLE ./data ./results 1 10
  ```
 

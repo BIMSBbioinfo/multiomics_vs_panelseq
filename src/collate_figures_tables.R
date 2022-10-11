@@ -21,6 +21,7 @@ library(magrittr)
 library(stringr)
 library(dplyr)
 library(tidyr)
+library(grid)
 
 message(date(), " => collecting results files")
 

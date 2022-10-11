@@ -300,7 +300,7 @@ layout <-
  BBBBCC"
 p <- l.p[[1]] + l.p[[2]] + p.ven + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
 ggsave(filename = file.path(folder, 'figure_S2.pdf'), plot = p, 
-       width = 12, height = 7)
+       width = 15, height = 8)
 
 
 message(date(), " => printing supplementary tables to xlsx files")

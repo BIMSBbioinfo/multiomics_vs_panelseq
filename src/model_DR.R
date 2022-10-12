@@ -160,7 +160,7 @@ if (!dir.exists(file.path(p.out, outdir))) {
 # generate seeds to be used in modeling runs
 # the seed is always set to 1234 for the first run
 seeds <- c(1234, sample(1:2^10, repeatModeling-1))  
-cv_reps <- 1 #number of repetitions for cross-validation
+cv_reps <- 3 #number of repetitions for cross-validation
 
 pbo = pbapply::pboptions(type="txt")
 

@@ -6,7 +6,7 @@ folder.data <- args[2] #path to a folder that contains all data (including auxil
 
 # Check for missing packages, install if needed
 list_of_pkgs <- c("openxlsx", "ggplot2", "ggpubr","ggrepel","ggridges","patchwork",
-                  "data.table","janitor","magrittr","stringr","dplyr","tidyr")
+                  "data.table","janitor","magrittr","stringr","dplyr","tidyr","grid")
 install.packages(list_of_pkgs[! list_of_pkgs %in% rownames(installed.packages())])
 
 library(openxlsx)
@@ -151,19 +151,42 @@ p3 <- ggplot(dt, aes( x = drugName, y = Rsquared)) +
 # supp. figure 1: => we say why we chose RF for main figure
 # comparison of methods (RF/glmnet/svm) and ppopts (with/without pca)
 stats <- stats %>% dplyr::rename(Rsquared = Rsquare)
-plots <- lapply(c('CCLE', 'beatAML'), function(ds) {
-  ggboxplot(stats[dataset == ds], x = 'type', y = 'Rsquared', 
-            add = 'jitter', color = 'type') +
-    facet_grid(ppOpts ~ model) + stat_compare_means() + 
+plots <- lapply(c('center+scale+nzv', 'center+scale+nzv+pca'), function(ds) {
+  stats %>% dplyr::filter(dataset %in% c('CCLE', 'beatAML'))%>%
+    dplyr::filter(ppOpts == "center+scale+nzv+pca")%>%
+    ggboxplot(x = 'type', y = 'Rsquared', 
+              add = 'jitter', color = 'type') +
+    facet_grid(model ~ dataset) + stat_compare_means() + 
     scale_color_brewer(type = 'qual', palette = 6) +
     theme_bw()+
-    theme(legend.position = 'none', axis.title.x = element_blank()) + 
-    labs(title = ds)
+    theme(legend.position = 'none', axis.title.x = element_blank()) +
+    labs(title = paste("Method:",ds))
 })
 
-p <- plots[[1]] + plots[[2]]
+pdx_plots <- lapply(c("glmnet","svmRadial"), function(method){
+  dt <- stats[dataset == 'PDX'][model == method][ppOpts == 'center+scale+nzv']
+  dtc <- dcast(dt, drugName + run ~ type, value.var = 'Rsquared')
+  stars <- do.call(rbind, lapply(split(dtc, dtc$drugName), function(x) {
+    pval <- wilcox.test(x$multiomics, x$panel, alternative = 'greater')[['p.value']]
+    data.table('drugName' = x$drugName[1], 
+               'pval' = pval,
+               'star' = gtools::stars.pval(pval))
+  }))
+  ggplot(dt, aes( x = drugName, y = Rsquared)) + 
+    geom_boxplot(aes(fill = type), outlier.shape = NA) + 
+    geom_text(data = stars, aes(x = drugName, y = 0.5, label = star)) +
+    scale_fill_brewer(type = 'qual', palette = 6) +
+    facet_grid(~ dataset) +
+    labs(x = "Drugs", 
+         y = "Rsquared")+
+    theme(legend.title = element_blank(), legend.position = 'right') +
+    coord_flip()+
+    labs(title = paste("Model:",method))
+})
+
+p <- ggarrange(plots[[1]],plots[[2]],pdx_plots[[1]],pdx_plots[[2]],labels = "AUTO")
 ggsave(filename = file.path(folder, 'figure_S1.pdf'), plot = p, 
-       width = 14.7, height = 7.44)
+       width = 30, height = 20)
 
 # main figure 2: 
 # drug classes by improvement 
@@ -214,7 +237,6 @@ p4 <- t.tmp %>%
         axis.title.x = element_text(vjust = -1.2))
 
 #ggsave(filename = file.path(folder, 'figure_2.pdf'), plot = p4,width = 9, height = 4.96)
-
 #for plotting
 region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
@@ -223,7 +245,7 @@ region <- function(row, col){
 pdf(paste0(folder,"/figure_1.pdf"),width = 15,height = 8)
 grid.newpage()
 pushViewport(viewport(layout = grid.layout(nrow = 5, ncol = 5)))
-print(p1+labs(tag = "A"), vp = region(row = 1:3, col = 1:3))   # Span over two columns
+print(p1+labs(tag = "A"), vp = region(row = 1:3, col = 1:3))
 print(p3+labs(tag = "B"), vp = region(row = 1:2, col = 4:5))
 print(p4+labs(tag = "C"), vp = region(row = 4:5, col = 1:3))
 print(p2+labs(tag = "D") , vp = region(row = 3:5, col = 4:5))

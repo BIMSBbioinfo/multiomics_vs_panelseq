@@ -129,12 +129,12 @@ stars <- do.call(rbind, lapply(split(dtc, dtc$drugName), function(x) {
 }))
 p3 <- ggplot(dt, aes( x = drugName, y = Rsquared)) + 
   geom_boxplot(aes(fill = type), outlier.shape = NA) + 
-  geom_text(data = stars, aes(x = drugName, y = 0.45, label = star)) +
+  geom_text(data = stars, aes(x = drugName, y = 0.5, label = star)) +
   scale_fill_brewer(type = 'qual', palette = 6) +
   facet_grid(~ dataset) +
   labs(x = "Drugs", 
        y = "Rsquared")+
-  theme(legend.title = element_blank(), legend.position = 'top') +
+  theme(legend.title = element_blank(), legend.position = 'right') +
   coord_flip()
 
 
@@ -224,9 +224,9 @@ pdf(paste0(folder,"/figure_1.pdf"),width = 15,height = 8)
 grid.newpage()
 pushViewport(viewport(layout = grid.layout(nrow = 5, ncol = 5)))
 print(p1+labs(tag = "A"), vp = region(row = 1:3, col = 1:3))   # Span over two columns
-print(p2+labs(tag = "B"), vp = region(row = 1:2, col = 4:5))
+print(p3+labs(tag = "B"), vp = region(row = 1:2, col = 4:5))
 print(p4+labs(tag = "C"), vp = region(row = 4:5, col = 1:3))
-print(p3+labs(tag = "D") , vp = region(row = 3:5, col = 4:5))
+print(p2+labs(tag = "D") , vp = region(row = 3:5, col = 4:5))
 dev.off()
 
 # supplementary figure 2: 

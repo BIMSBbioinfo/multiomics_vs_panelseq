@@ -163,30 +163,21 @@ plots <- lapply(c('center+scale+nzv', 'center+scale+nzv+pca'), function(ds) {
     labs(title = paste("Method:",ds))
 })
 
-pdx_plots <- lapply(c("glmnet","svmRadial"), function(method){
-  dt <- stats[dataset == 'PDX'][model == method][ppOpts == 'center+scale+nzv']
-  dtc <- dcast(dt, drugName + run ~ type, value.var = 'Rsquared')
-  stars <- do.call(rbind, lapply(split(dtc, dtc$drugName), function(x) {
-    pval <- wilcox.test(x$multiomics, x$panel, alternative = 'greater')[['p.value']]
-    data.table('drugName' = x$drugName[1], 
-               'pval' = pval,
-               'star' = gtools::stars.pval(pval))
-  }))
+pdx_plots <- lapply(list, function(method){
   ggplot(dt, aes( x = drugName, y = Rsquared)) + 
     geom_boxplot(aes(fill = type), outlier.shape = NA) + 
     geom_text(data = stars, aes(x = drugName, y = 0.5, label = star)) +
     scale_fill_brewer(type = 'qual', palette = 6) +
-    facet_grid(~ dataset) +
+    facet_grid(~ model) +
     labs(x = "Drugs", 
          y = "Rsquared")+
     theme(legend.title = element_blank(), legend.position = 'right') +
-    coord_flip()+
-    labs(title = paste("Model:",method))
+    coord_flip()
 })
 
-p <- ggarrange(plots[[1]],plots[[2]],pdx_plots[[1]],pdx_plots[[2]],labels = "AUTO")
+p <- ggarrange(plots[[1]],plots[[2]],labels = "AUTO")
 ggsave(filename = file.path(folder, 'figure_S1.pdf'), plot = p, 
-       width = 30, height = 20)
+       width = 30, height = 15)
 
 # main figure 2: 
 # drug classes by improvement 
@@ -242,13 +233,13 @@ region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 } 
 
-pdf(paste0(folder,"/figure_1.pdf"),width = 15,height = 8)
+pdf(paste0(folder,"/figure_1.pdf"),width = 16,height = 10)
 grid.newpage()
 pushViewport(viewport(layout = grid.layout(nrow = 5, ncol = 5)))
 print(p1+labs(tag = "A"), vp = region(row = 1:3, col = 1:3))
-print(p3+labs(tag = "B"), vp = region(row = 1:2, col = 4:5))
-print(p4+labs(tag = "C"), vp = region(row = 4:5, col = 1:3))
-print(p2+labs(tag = "D") , vp = region(row = 3:5, col = 4:5))
+print(p3+labs(tag = "B"), vp = region(row = 1:3, col = 4:5))
+print(p2+labs(tag = "C"), vp = region(row = 4:5, col = 1:2))
+print(p4+labs(tag = "D") , vp = region(row = 4:5, col = 3:5))
 dev.off()
 
 # supplementary figure 2: 

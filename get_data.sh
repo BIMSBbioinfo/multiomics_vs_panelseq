@@ -37,9 +37,9 @@ PARENT="https://bimsbstatic.mdc-berlin.de/akalin/AAkalin_PanelvsMulti/"
 wget -P $OUTPUT $PARENT/"data.tar.gz"
 tar -xzf $OUTPUT/"data.tar.gz" -C $OUTPUT
 rm $OUTPUT/"data.tar.gz"
-wget -P $OUTPUT $PARENT/"results.tar.gz"
-tar -xzf $OUTPUT/"results.tar.gz" -C $OUTPUT
-rm $OUTPUT/"results.tar.gz"
+wget -P $OUTPUT $PARENT/"results.tgz"
+tar -xzvf $OUTPUT/"results.tgz" -C $OUTPUT
+rm $OUTPUT/"results.tgz"
 
 
 

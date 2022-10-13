@@ -69,7 +69,7 @@ p1 <- ggscatter(dtc, x = 'panel', y = 'multiomics') +
   coord_fixed() + 
   geom_text_repel(data = top_drugs, aes(label = drugName), size = 3) + 
   scale_color_gradient2(low = "black", mid = "gray", high = "red") +
-  labs(color = "Improvement (Rsquared)", x = "Panel", y = "Multiomics") +
+  labs(color = "Improvement\n(Rsquared)", x = "Panel", y = "Multiomics") +
   facet_wrap(~ dataset, nrow = 1) +
   theme(legend.position = 'right')
 
@@ -138,16 +138,6 @@ p3 <- ggplot(dt, aes( x = drugName, y = Rsquared)) +
   coord_flip()
 
 
-# collate Figure 1 
-#layout <- 
-#  "AAACC
-#AAACC
-#BBBCC
-#"
-#p <- p1 + p2 + p3 + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
-
-#ggsave(filename = file.path(folder, 'figure1.pdf'), plot = p, width = 13.76, height = 7.44)
-
 # supp. figure 1: => we say why we chose RF for main figure
 # comparison of methods (RF/glmnet/svm) and ppopts (with/without pca)
 stats <- stats %>% dplyr::rename(Rsquared = Rsquare)
@@ -179,7 +169,6 @@ p <- ggarrange(plots[[1]],plots[[2]],labels = "AUTO")
 ggsave(filename = file.path(folder, 'figure_S1.pdf'), plot = p, 
        width = 30, height = 15)
 
-# main figure 2: 
 # drug classes by improvement 
 # assemble a table
 dt.dcl <- stats[dataset == "CCLE" & ppOpts == "center+scale+nzv" & model == "ranger"]
@@ -227,20 +216,16 @@ p4 <- t.tmp %>%
   theme(legend.position = "bottom", 
         axis.title.x = element_text(vjust = -1.2))
 
-#ggsave(filename = file.path(folder, 'figure_2.pdf'), plot = p4,width = 9, height = 4.96)
-#for plotting
-region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-} 
+# collate Figure 1 
+layout <- "AABB
+   AABB 
+   CCDD
+"
 
-pdf(paste0(folder,"/figure_1.pdf"),width = 16,height = 10)
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 5, ncol = 5)))
-print(p1+labs(tag = "A"), vp = region(row = 1:3, col = 1:3))
-print(p3+labs(tag = "B"), vp = region(row = 1:3, col = 4:5))
-print(p2+labs(tag = "C"), vp = region(row = 4:5, col = 1:2))
-print(p4+labs(tag = "D") , vp = region(row = 4:5, col = 3:5))
-dev.off()
+p <- p1 + p3 + p2 + p4 + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
+ggsave(filename = file.path(folder, 'figure_1.pdf'), 
+       plot = p, width = 22,
+       height = 10)
 
 # supplementary figure 2: 
 # drug classes by improvement (glmnet and svm)

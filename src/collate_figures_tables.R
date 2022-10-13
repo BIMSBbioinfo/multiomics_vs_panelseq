@@ -31,6 +31,8 @@ stats <- do.call(rbind, sapply(simplify = F, c('CCLE', 'PDX', 'beatAML'), functi
   dt$dataset <- x
   return(dt)
 }))
+stats <- stats %>% dplyr::rename(Rsquared = Rsquare)
+
 
 # import variable importance metrics 
 IMP <- sapply(simplify = F, c('CCLE', 'PDX', 'beatAML'), function(dataset) {
@@ -55,7 +57,7 @@ ggplot2::theme_set(ggpubr::theme_pubclean())
 # main figure 1: 
 # ccle/beataml/pdx (with RF without pca) (scatter/boxplots)
 dt <- stats[model == 'ranger'][ppOpts == 'center+scale+nzv'][dataset %in% c('beatAML', 'CCLE')]
-dtc <- dcast.data.table(dt, drugName + dataset ~ type, value.var = 'Rsquare')
+dtc <- dcast.data.table(dt, drugName + dataset ~ type, value.var = 'Rsquared')
 # get top 5 drugs per dataset
 top_drugs <- do.call(rbind, lapply(split(dtc, dtc$dataset), function(x) {
   x[order(multiomics - panel, decreasing = T),][1:5]
@@ -77,7 +79,6 @@ p1 <- ggscatter(dtc, x = 'panel', y = 'multiomics') +
 # use "ranger" importance metrics 
 # get a summary of top gex 
 dt <- stats[model == 'ranger'][ppOpts == 'center+scale+nzv'][dataset == 'CCLE']
-dt <- dt %>% dplyr::rename(Rsquared = Rsquare)
 dtc <- dcast.data.table(dt, drugName ~ type, value.var = 'Rsquared')
 dtc$improvement <- dtc$multiomics - dtc$panel
 # compute percentage of "gex" features in top informative features for CCLE
@@ -116,47 +117,21 @@ p2 <- ggscatter(dtc, x = 'improvement', y = 'count_gex', fill = 'multiomics',
   theme(legend.position = 'right')
 
 
-
 ## make PDX plot (boxplot per drug with significance labels)
-dt <- stats[dataset == 'PDX'][model == 'ranger'][ppOpts == 'center+scale+nzv']
-dt <- dt %>% dplyr::rename(Rsquared = Rsquare)
-dtc <- dcast(dt, drugName + run ~ type, value.var = 'Rsquared')
-stars <- do.call(rbind, lapply(split(dtc, dtc$drugName), function(x) {
-  pval <- wilcox.test(x$multiomics, x$panel, alternative = 'greater')[['p.value']]
-  data.table('drugName' = x$drugName[1], 
-             'pval' = pval,
-             'star' = gtools::stars.pval(pval))
-}))
-p3 <- ggplot(dt, aes( x = drugName, y = Rsquared)) + 
-  geom_boxplot(aes(fill = type), outlier.shape = NA) + 
-  geom_text(data = stars, aes(x = drugName, y = 0.5, label = star)) +
-  scale_fill_brewer(type = 'qual', palette = 6) +
-  facet_grid(~ dataset) +
-  labs(x = "Drugs", 
-       y = "Rsquared")+
-  theme(legend.title = element_blank(), legend.position = 'right') +
-  coord_flip()
-
-
-# supp. figure 1: => we say why we chose RF for main figure
-# comparison of methods (RF/glmnet/svm) and ppopts (with/without pca)
-stats <- stats %>% dplyr::rename(Rsquared = Rsquare)
-plots <- lapply(c('center+scale+nzv', 'center+scale+nzv+pca'), function(ds) {
-  stats %>% dplyr::filter(dataset %in% c('CCLE', 'beatAML'))%>%
-    dplyr::filter(ppOpts == "center+scale+nzv+pca")%>%
-    ggboxplot(x = 'type', y = 'Rsquared', 
-              add = 'jitter', color = 'type') +
-    facet_grid(model ~ dataset) + stat_compare_means() + 
-    scale_color_brewer(type = 'qual', palette = 6) +
-    theme_bw()+
-    theme(legend.position = 'none', axis.title.x = element_blank()) +
-    labs(title = paste("Method:",ds))
-})
-
-pdx_plots <- lapply(list, function(method){
+# plot PDX results for each method 
+pdx_plots <- sapply(simplify = F, unique(stats$model), function(m){
+  dt <- stats[dataset == 'PDX'][model == m][ppOpts == 'center+scale+nzv']
+  dtc <- dcast(dt, drugName + run ~ type, value.var = 'Rsquared')
+  stars <- do.call(rbind, lapply(split(dtc, dtc$drugName), function(x) {
+    pval <- wilcox.test(x$multiomics, x$panel, alternative = 'greater', 
+                        exact = FALSE)[['p.value']]
+    data.table('drugName' = x$drugName[1], 
+               'pval' = pval,
+               'star' = gtools::stars.pval(pval))
+  }))
   ggplot(dt, aes( x = drugName, y = Rsquared)) + 
     geom_boxplot(aes(fill = type), outlier.shape = NA) + 
-    geom_text(data = stars, aes(x = drugName, y = 0.5, label = star)) +
+    geom_text(data = stars, aes(x = drugName, y = 0.4, label = star)) +
     scale_fill_brewer(type = 'qual', palette = 6) +
     facet_grid(~ model) +
     labs(x = "Drugs", 
@@ -165,7 +140,28 @@ pdx_plots <- lapply(list, function(method){
     coord_flip()
 })
 
-p <- ggarrange(plots[[1]],plots[[2]],labels = "AUTO")
+# use "ranger" results as main figure panel for PDX 
+p3 <- pdx_plots$ranger
+
+# supp. figure 1: => we say why we chose RF for main figure
+# comparison of methods (RF/glmnet/svm) and ppopts (with/without pca)
+plots <- lapply(c('center+scale+nzv', 'center+scale+nzv+pca'), function(ds) {
+  stats %>% dplyr::filter(dataset %in% c('CCLE', 'beatAML'))%>%
+    dplyr::filter(ppOpts == ds)%>%
+    ggboxplot(x = 'type', y = 'Rsquared', 
+              add = 'jitter', color = 'type') +
+    facet_grid(model ~ dataset) + 
+    stat_compare_means(paired = T, label.y = 0.4,
+                       method.args = list('alternative' = 'greater')) + 
+    scale_color_brewer(type = 'qual', palette = 6) +
+    theme_bw()+
+    theme(legend.position = 'none', axis.title.x = element_blank()) +
+    labs(title = paste("Method:",ds))
+})
+
+# print 
+p <- plots[[1]] + plots[[2]] + pdx_plots$glmnet + pdx_plots$svmRadial + 
+  plot_annotation(tag_levels = 'A')
 ggsave(filename = file.path(folder, 'figure_S1.pdf'), plot = p, 
        width = 30, height = 15)
 

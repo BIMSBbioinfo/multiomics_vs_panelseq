@@ -274,15 +274,16 @@ lapply(c("glmnet", "svmRadial"),
 
 
 # Most important features for venotoclax
-arrange(IMP$CCLE$rf[IMP$CCLE$rf$VENETOCLAX > 0, c("feature", "VENETOCLAX")], desc(VENETOCLAX)) -> t.vnt.sort
-t.vnt.sort <- t.vnt.sort[t.vnt.sort$VENETOCLAX >= quantile(t.vnt.sort$VENETOCLAX, 0.985), ]
+# use beatAML data to demonstrate this as it is a AML-drug and shows the top improvement for beatAML but not CCLE.
+arrange(IMP$beatAML$rf[IMP$beatAML$rf$Venetoclax > 0, c("feature", "Venetoclax")], desc(Venetoclax)) -> t.vnt.sort
+t.vnt.sort <- t.vnt.sort[1:20,]
 t.vnt.sort$feature <- str_remove(t.vnt.sort$feature, ".panel")
 str_sub(t.vnt.sort$feature, -4, -4) <- "-"
 t.vnt.sort$colvar <- str_split_fixed(t.vnt.sort$feature, "-", 2)[, 2]
 t.vnt.sort$feature <- str_remove(str_split_fixed(t.vnt.sort$feature, "-", 2)[, 1], "HALLMARK_")
 t.vnt.sort$feature <- factor(t.vnt.sort$feature, levels = c(t.vnt.sort$feature))
 
-p.ven <- ggplot(data = t.vnt.sort, aes(x = VENETOCLAX, y = feature)) + 
+p.ven <- ggplot(data = t.vnt.sort, aes(x = Venetoclax, y = feature)) + 
   geom_col(aes(fill = colvar), size = 0.5) + 
   scale_fill_brewer(type = 'qual', palette = 6) +
   labs(y = "", x = "Venetoclax feature importance", fill = "Feature type") + 

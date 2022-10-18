@@ -5,8 +5,9 @@ folder <- args[1] #path to folder which contains result folders for CCLE/PDX/bea
 folder.data <- args[2] #path to a folder that contains all data (including auxiliary, prepared, etc.)
 
 # Check for missing packages, install if needed
-list_of_pkgs <- c("openxlsx", "ggplot2", "ggpubr","ggrepel","ggridges","patchwork",
-                  "data.table","janitor","magrittr","stringr","dplyr","tidyr","grid")
+options(repos = structure(c(CRAN = "https://ftp.fau.de/cran/")))   # modify according to personal preferences
+list_of_pkgs <- c("openxlsx", "ggplot2", "ggpubr", "ggrepel", "ggridges", "patchwork",
+                  "data.table", "janitor", "magrittr", "stringr", "dplyr", "tidyr", "grid")
 install.packages(list_of_pkgs[! list_of_pkgs %in% rownames(installed.packages())])
 
 library(openxlsx)
@@ -307,11 +308,11 @@ message(date(), " => printing supplementary tables to xlsx files")
 # supp. table 1
 # performance metrics
 OUT <- createWorkbook()
-lapply(unique(stats$dataset), function(dataset) {
-  lapply(unique(stats[dataset == dataset]$model), function(model) {
-    sname<-paste(dataset, model, sep = "_")
+lapply(unique(stats$dataset), function(Dataset) {
+  lapply(unique(stats[dataset == Dataset]$model), function(Model) {
+    sname<-paste(Dataset, Model, sep = "_")
     addWorksheet(OUT, sname)
-    writeData(OUT, sheet = sname, x = stats[dataset == dataset][model == model])
+    writeData(OUT, sheet = sname, x = stats[dataset == Dataset][model == Model])
   })
 })
 saveWorkbook(OUT, file.path(folder, "SupplementaryTable1.xlsx"), overwrite = T)

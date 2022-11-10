@@ -219,7 +219,7 @@ layout <- "AABB
    CCDD
 "
 
-p <- p1 + p3 + p2 + p4 + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
+p <- p1 + p2 + p3 + p4 + plot_layout(design = layout) + plot_annotation(tag_levels = 'A')
 ggsave(filename = file.path(folder, 'figure_1.pdf'), 
        plot = p, width = 22,
        height = 10)
